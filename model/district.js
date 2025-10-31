@@ -11,6 +11,10 @@ const sequelize = require("../app/connection/connection");
       type: DataTypes.STRING(100),
       allowNull: false
     },
+    district_name_en: {
+      type: DataTypes.STRING(100),
+      allowNull: false
+    },
    created_by: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -26,6 +30,10 @@ const sequelize = require("../app/connection/connection");
       defaultValue: DataTypes.NOW,
     },
     division_id:{
+      type:DataTypes.INTEGER,
+      allowNull:true
+    },
+    state_id:{
       type:DataTypes.INTEGER,
       allowNull:true
     }

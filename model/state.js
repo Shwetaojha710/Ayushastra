@@ -11,6 +11,10 @@ const sequelize = require("../app/connection/connection");
       type: DataTypes.STRING(100),
       allowNull: false
     },
+    state_name_en: {
+      type: DataTypes.STRING(100),
+      allowNull: false
+    },
     createddate: {
       type: DataTypes.DATE,
       allowNull: false

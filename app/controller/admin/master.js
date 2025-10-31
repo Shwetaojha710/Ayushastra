@@ -14,12 +14,17 @@ const Category = require("../../../model/category.js");
 const slugify = require("slugify");
 const banner = require("../../../model/banner.js");
 const coupons = require("../../../model/coupon.js");
-const {  State } = require("../../../model/state.js");
-const {  District } = require("../../../model/district.js");
+const State = require("../../../model/state.js");
+const District = require("../../../model/district.js");
+const Doctor = require("../../../model/doctor.js");
+const Qualification = require("../../../model/qualification.js");
+const path = require("path");
+const speclization = require("../../../model/specilization.js");
+const { diff } = require("util");
 // product_gallery
 
 exports.addDiseases = async (req, res) => {
-  const { name, status } = req.body;
+  const { name, description, status } = req.body;
   try {
     if (!name) {
       return Helper.response(false, "Diseases name is required", [], res, 400);
@@ -42,12 +47,12 @@ exports.addDiseases = async (req, res) => {
     for (const file of req.files) {
       const newDoc = await Diseases.create({
         name: name.trim(),
+        description: description,
         status,
         doc_type: file.mimetype,
         image: file.filename,
         createdBy: req.users?.id,
         updatedBy: req.users?.id,
-        status: status || "active",
       });
       createdDocs.push(newDoc);
     }
@@ -126,14 +131,14 @@ exports.getDiseasesDD = async (req, res) => {
 
 exports.updateDiseases = async (req, res) => {
   try {
-    const { id, name, status } = req.body;
+    const { id, name, description, status } = req.body;
 
     if (!id) {
       return Helper.response(false, "Diseases ID is required", [], res, 400);
     }
-    if (!name) {
-      return Helper.response(false, "Diseases name is required", [], res, 400);
-    }
+    // if (!name) {
+    //   return Helper.response(false, "Diseases name is required", [], res, 400);
+    // }
 
     const disease = await Diseases.findByPk(id);
     if (!disease) {
@@ -155,6 +160,7 @@ exports.updateDiseases = async (req, res) => {
 
     disease.name = name || disease.name;
     disease.status = status || disease.status;
+    disease.description = description || disease.description;
     disease.updatedBy = req.users?.id;
 
     await disease.save();
@@ -269,9 +275,9 @@ exports.updateUnit = async (req, res) => {
     if (!id) {
       return Helper.response(false, "ID is required", [], res, 400);
     }
-    if (!name) {
-      return Helper.response(false, "Unit name is required", [], res, 400);
-    }
+    // if (!name) {
+    //   return Helper.response(false, "Unit name is required", [], res, 400);
+    // }
 
     const Units = await Unit.findByPk(id);
     if (!Units) {
@@ -279,9 +285,9 @@ exports.updateUnit = async (req, res) => {
     }
 
     Units.name = name || Units.name;
-    Units.status = status || Units.status;
+    Units.status = status;
     Units.updatedBy = req.users.id;
-    await Unit.save();
+    await Units.save();
     return Helper.response(true, "Units updated successfully", Units, res, 200);
   } catch (error) {
     return Helper.response(
@@ -391,9 +397,9 @@ exports.updateBrand = async (req, res) => {
     if (!id) {
       return Helper.response(false, "ID is required", [], res, 400);
     }
-    if (!name) {
-      return Helper.response(false, "Unit name is required", [], res, 400);
-    }
+    // if (!name) {
+    //   return Helper.response(false, "Unit name is required", [], res, 400);
+    // }
 
     const Units = await Brand.findByPk(id);
     if (!Units) {
@@ -443,23 +449,50 @@ exports.deleteBrand = async (req, res) => {
 
 exports.addingredient = async (req, res) => {
   try {
-    const { name, status } = req.body;
+    const { name, status, description } = req.body;
 
     if (!name) {
       return Helper.response(false, "Ingredient is required", [], res, 400);
     }
-
-    const unit = await Ingredient.create({
-      name,
-      status,
-      createdBy: req.users.id,
+    const createdDocs = [];
+    // const unit = await Ingredient.create({
+    //   name,
+    //   status,
+    //   createdBy: req.users.id,
+    // });
+    const checkIngredient = await Ingredient.findOne({
+      where: {
+        name,
+      },
     });
+    if (checkIngredient) {
+      return Helper.response(
+        true,
+        "Ingredient Name Already Exists",
+        checkIngredient,
+        res,
+        200
+      );
+    }
+
+    for (const file of req.files) {
+      const newDoc = await Ingredient.create({
+        name,
+        status,
+        description,
+        createdBy: req.users.id,
+        doc_type: file.mimetype,
+        image: file.filename,
+      });
+      createdDocs.push(newDoc);
+    }
+
     return Helper.response(
       true,
       "Ingredient added successfully",
-      unit,
+      newDoc,
       res,
-      201
+      200
     );
   } catch (error) {
     return Helper.response(false, error.message, "Error adding Unit", res, 500);
@@ -523,40 +556,87 @@ exports.getAllIngredientDD = async (req, res) => {
   }
 };
 
+// exports.updateIngredient = async (req, res) => {
+//   try {
+//      const { name, status, description } = req.body;
+//     if (!id) {
+//       return Helper.response(false, "ID is required", [], res, 400);
+//     }
+//     // if (!name) {
+//     //   return Helper.response(
+//     //     false,
+//     //     "Ingredient name is required",
+//     //     [],
+//     //     res,
+//     //     400
+//     //   );
+//     // }
+
+//     const Units = await Ingredient.findByPk(id);
+//     if (!Units) {
+//       return Helper.response(false, "Ingredient not found", [], res, 404);
+//     }
+
+//     Units.name = name || Units.name;
+//     Units.status = status;
+//     Units.updatedBy = req.users.id;
+//     await Units.save();
+//     return Helper.response(true, "Units updated successfully", Units, res, 200);
+//   } catch (error) {
+//     return Helper.response(
+//       false,
+//       error.message,
+//       "Error updating Unit",
+//       res,
+//       500
+//     );
+//   }
+// };
+
 exports.updateIngredient = async (req, res) => {
   try {
-    const { id, name, status } = req.body;
-    if (!id) {
-      return Helper.response(false, "ID is required", [], res, 400);
-    }
-    if (!name) {
-      return Helper.response(
-        false,
-        "Ingredient name is required",
-        [],
-        res,
-        400
-      );
-    }
+    const { id, name, status, description} = req.body;
 
-    const Units = await Ingredient.findByPk(id);
-    if (!Units) {
+    if (!id) {
+      return Helper.response(false, "Category ID is required", [], res, 400);
+    }
+    // if (!name) {
+    //   return Helper.response(false, "Category name is required", [], res, 400);
+    // }
+
+  const ingredient = await Ingredient.findByPk(id);
+    if (!ingredient) {
       return Helper.response(false, "Ingredient not found", [], res, 404);
     }
 
-    Units.name = name || Units.name;
-    Units.status = status;
-    Units.updatedBy = req.users.id;
-    await Units.save();
-    return Helper.response(true, "Units updated successfully", Units, res, 200);
-  } catch (error) {
+    if (req.files && req.files.length > 0) {
+      if (ingredient.image) {
+        Helper.deleteFile(ingredient.image);
+      }
+
+      const file = req.files[0];
+      ingredient.image = file.filename;
+      ingredient.doc_type = file.mimetype;
+    }
+
+      ingredient.name = name || ingredient.name;
+    ingredient.status = status;
+    ingredient.description = description || ingredient?.description;
+    ingredient.updatedBy = req.users.id;
+
+    await ingredient.save();
+
     return Helper.response(
-      false,
-      error.message,
-      "Error updating Unit",
+      true,
+      "Ingredient updated successfully",
+      ingredient,
       res,
-      500
+      200
     );
+  } catch (error) {
+    console.error("Error updating ingredient:", error);
+    Helper.deleteUploadedFiles(req.files);
+    return Helper.response(false, error.message, null, res, 500);
   }
 };
 
@@ -689,15 +769,15 @@ exports.updateProductType = async (req, res) => {
     if (!id) {
       return Helper.response(false, "ID is required", [], res, 400);
     }
-    if (!name) {
-      return Helper.response(
-        false,
-        "ProductType name is required",
-        [],
-        res,
-        400
-      );
-    }
+    // if (!name) {
+    //   return Helper.response(
+    //     false,
+    //     "ProductType name is required",
+    //     [],
+    //     res,
+    //     400
+    //   );
+    // }
 
     const Units = await ProductType.findByPk(id);
     if (!Units) {
@@ -825,9 +905,9 @@ exports.updateSalt = async (req, res) => {
     if (!id) {
       return Helper.response(false, "ID is required", [], res, 400);
     }
-    if (!name) {
-      return Helper.response(false, "Salt name is required", [], res, 400);
-    }
+    // if (!name) {
+    //   return Helper.response(false, "Salt name is required", [], res, 400);
+    // }
 
     const Units = await Salt.findByPk(id);
     if (!Units) {
@@ -1148,9 +1228,9 @@ exports.updateProduct = async (req, res) => {
 
     // const product = await Product.findOne(id, { transaction: t });
     const product = await Product.findOne({
-      where:{
-        id
-      }
+      where: {
+        id,
+      },
     });
     if (!product) {
       return Helper.response(false, "Product not found", {}, res, 404);
@@ -1164,9 +1244,8 @@ exports.updateProduct = async (req, res) => {
       req.body.disease_id = req.body.disease.join(",");
     }
     let slug;
-    if(req.body.product_name){
-      
-       slug = slugify(req.body.product_name, { lower: true, strict: true });
+    if (req.body.product_name) {
+      slug = slugify(req.body.product_name, { lower: true, strict: true });
     }
     // Update product fields
     const updateFields = {
@@ -1182,15 +1261,18 @@ exports.updateProduct = async (req, res) => {
       ingredient_id: req.body.ingredient_id || req.body.ingredients,
       exp_date: req.body.exp_date,
       manufacture_date: req.body.mfg_date,
-      isFragile: req.body.fragile ? req.body.fragile === "true": product?.fragile
-      ,
+      isFragile: req.body.fragile
+        ? req.body.fragile === "true"
+        : product?.fragile,
       gst: req.body.gst,
       hsn: req.body.hsn,
       sku: req.body.sku,
       stock: req.body.stock,
-      isPublish: req.body.publish ? req.body.publish === "true" : product?.publish,
+      isPublish: req.body.publish
+        ? req.body.publish === "true"
+        : product?.publish,
       unit: req.body.unit,
-      status: req.body.status ?  req.body.status === "true" : product?.status,
+      status: req.body.status ? req.body.status === "true" : product?.status,
       max_purchase_qty: req.body.max_purchase_qty,
       minimum_qty: req.body.min_purchase_qty,
       stock_alert: req.body.low_stock_alert,
@@ -1399,7 +1481,7 @@ exports.addcoupon = async (req, res) => {
       usage_per_user,
       coupon_count,
       status,
-      description
+      description,
     } = req.body;
 
     if (!coupon_name) {
@@ -1453,15 +1535,15 @@ exports.getcoupon = async (req, res) => {
           where: {
             id: item.product_id,
           },
-         attributes: [
-        [col("id"), "value"],
-        [col("product_name"), "label"],
-      ],
+          attributes: [
+            [col("id"), "value"],
+            [col("product_name"), "label"],
+          ],
         });
         return {
           ...item,
-          product_name: product?.label ,
-          products:product
+          product_name: product?.label,
+          products: product,
         };
       })
     );
@@ -1516,32 +1598,49 @@ exports.getcouponDD = async (req, res) => {
 
 exports.updatecoupon = async (req, res) => {
   try {
-    const { id, coupon_name, status,product_id,description,min_amount,max_discount,start_time,end_time,usage_per_user,coupon_count } = req.body;
+    const {
+      id,
+      coupon_name,
+      status,
+      product_id,
+      description,
+      min_amount,
+      max_discount,
+      start_time,
+      end_time,
+      usage_per_user,
+      coupon_count,
+    } = req.body;
     if (!id) {
       return Helper.response(false, "ID is required", [], res, 400);
     }
-    if (!coupon_name) {
-      return Helper.response(false, "coupon name is required", [], res, 400);
-    }
+    // if (!coupon_name) {
+    //   return Helper.response(false, "coupon name is required", [], res, 400);
+    // }
 
     const coupon = await coupons.findByPk(id);
     if (!coupon) {
       return Helper.response(false, "Coupon not found", [], res, 404);
     }
 
-      coupon.coupon_name=coupon_name
-      coupon.product_id=product_id
-      coupon.min_amount=min_amount,
-      coupon.max_discount=max_discount
-      coupon.start_time=start_time
-      coupon.end_time=end_time
-      coupon.usage_per_user=usage_per_user
-      coupon.coupon_count=coupon_count
-      coupon.status=status
-      coupon.description=description
+    coupon.coupon_name = coupon_name;
+    coupon.product_id = product_id;
+    (coupon.min_amount = min_amount), (coupon.max_discount = max_discount);
+    coupon.start_time = start_time;
+    coupon.end_time = end_time;
+    coupon.usage_per_user = usage_per_user;
+    coupon.coupon_count = coupon_count;
+    coupon.status = status;
+    coupon.description = description;
     coupon.updatedBy = req.users.id;
     await coupon.save();
-    return Helper.response(true, "Coupon updated successfully", coupon, res, 200);
+    return Helper.response(
+      true,
+      "Coupon updated successfully",
+      coupon,
+      res,
+      200
+    );
   } catch (error) {
     return Helper.response(
       false,
@@ -1578,32 +1677,31 @@ exports.deletecoupon = async (req, res) => {
   }
 };
 
-
 exports.getstatedd = async (req, res) => {
   try {
     const district = await State.findAll({
       attributes: [
         [col("pk_uniqueid"), "value"],
-        [col("statename"), "label"],
+        [col("state_name_en"), "label"],
       ],
-      order: [["statename", "ASC"]],
+      order: [["state_name_en", "ASC"]],
     });
     if (district.length > 0) {
       const data = await Promise.all(
         district.map(async (item) => {
           return {
             value: item.pk_uniqueid,
-            label: item.statename,
+            label: item.state_name_en,
           };
         })
       );
-      return response(true, "state list", district, res, 200);
+      return Helper.response(true, "state list", district, res, 200);
     } else {
-      return response(false, "state list not found", null, res, 200);
+      return Helper.response(false, "state list not found", null, res, 200);
     }
   } catch (error) {
     console.error("Error processing request:", error);
-    return response(
+    return Helper.response(
       false,
       error.message,
       "Failed to get state Details",
@@ -1613,38 +1711,702 @@ exports.getstatedd = async (req, res) => {
   }
 };
 
-
-
 exports.getdistrictdd = async (req, res) => {
   try {
+    const { state_id } = req.body;
+    if (!state_id) {
+      return Helper.response(false, "State Is Required", {}, res, 200);
+    }
     const districts = await District.findAll({
+      where: {
+        state_id,
+      },
+      raw: true,
       attributes: [
         [col("pk_uniqueid"), "value"],
-        [col("districtname"), "label"],
+        [col("district_name_en"), "label"],
       ],
-      order: [["districtname", "ASC"]],
+      order: [["district_name_en", "ASC"]],
     });
-    if (district.length > 0) {
+    if (districts.length > 0) {
       const data = await Promise.all(
-        district.map(async (item) => {
+        districts.map(async (item) => {
           return {
-            value: item.pk_uniqueid,
-            label: item.districtname,
+            value: item.value,
+            label: item.label,
           };
         })
       );
-      return response(true, "District list", district, res, 200);
+      return Helper.response(true, "District list", data, res, 200);
     } else {
-      return response(false, "District list not found", null, res, 200);
+      return Helper.response(false, "District list not found", null, res, 200);
     }
   } catch (error) {
     console.error("Error processing request:", error);
-    return response(
+    return Helper.response(
       false,
       error.message,
       "Failed to get District Details",
       res,
       500
     );
+  }
+};
+
+const calculateAge = (dob) => {
+  const birth = new Date(dob);
+  const diff = Date.now() - birth.getTime();
+  return new Date(diff).getUTCFullYear() - 1970;
+};
+
+exports.addDoctor = async (req, res) => {
+  try {
+    const body = req.body;
+    const files = req.files;
+
+    // Required field check
+    if (!body.name || !body.email || !body.gender || !body.dob)
+      return Helper.response(false, "Missing required fields.", {}, res, 400);
+    // return res.status(400).json({ success: false, message: "Missing required fields." });
+    // Convert to Date objects
+    const start = new Date(`1970-01-01T${body?.start_time}:00`);
+    const end = new Date(`1970-01-01T${body?.end_time}:00`);
+
+    const diffMs = end - start; // difference in milliseconds
+    const duration = Math.floor(diffMs / 60000); // convert ms → minutes
+    // Build doctor data
+    const doctorData = {
+      loginId: 1, // Or req.user.id if using auth
+      name: body.name,
+      experience: body.experience,
+      email: body.email,
+      gender: body.gender,
+      dob: new Date(body.dob),
+      age: calculateAge(body.dob),
+      refferalCode: body.referral_code,
+      address: body.address,
+      cityId: body.city,
+      stateId: body.state,
+      pinCode: body.pin_code,
+      phoneConsult: body.alt_mobile,
+      phone: body.mobile,
+      speciality: body.specialization,
+      about: body.bio,
+      registrationNo: body.registration,
+      registrationDate: new Date(body.year_of_completion),
+      KYCstatus: "pending",
+      password: "123456", // or hashed
+      status: true,
+      availability: body?.availability,
+      end_time: body?.end_time,
+      start_time: body?.start_time,
+      online_consultation_fees: body?.online_consultation_fees,
+      duration,
+      profileImage: files.profile_img
+        ? `${path.basename(files.profile_img[0].path)}`
+        : null,
+      panNo: files.pan_img ? `${path.basename(files.pan_img[0].path)}` : null,
+      addharFrontImage: files.aadhaar_f_img
+        ? `${path.basename(files.aadhaar_f_img[0].path)}`
+        : null,
+      addharBackImage: files.aadhaar_b_img
+        ? `${path.basename(files.aadhaar_b_img[0].path)}`
+        : null,
+      cert_image: files.cert_img
+        ? `${path.basename(files.cert_img[0].path)}`
+        : null,
+      known_language: body.known_language,
+    };
+
+    // Save doctor
+    const doctor = await Doctor.create(doctorData);
+
+    // Handle qualifications
+    const qualifications = [];
+    let index = 0;
+
+    while (body[`qualifications[${index}].degree`]) {
+      const certFile = files[`qualifications[${index}].certificate`]
+        ? `${path.basename(
+            files[`qualifications[${index}].certificate`][0].path
+          )}`
+        : null;
+
+      qualifications.push({
+        doctorId: doctor.id,
+        degree: body[`qualifications[${index}].degree`],
+        passing_year: new Date(body[`qualifications[${index}].passing_year`]),
+        university: body[`qualifications[${index}].university`],
+        certificate_no: body[`qualifications[${index}].certificate_no`],
+        certificate: certFile,
+        certificate_type: body[`qualifications[${index}].certificate_type`],
+      });
+      index++;
+    }
+
+    if (qualifications.length > 0)
+      await Qualification.bulkCreate(qualifications);
+    return Helper.response(
+      true,
+      "Doctor added successfully",
+      {
+        doctor,
+        qualifications,
+      },
+      res,
+      200
+    );
+    // res.status(201).json({
+    //   success: true,
+    //   message: "Doctor added successfully",
+    //   data: {
+    //     doctor,
+    //     qualifications,
+    //   },
+    // });
+  } catch (error) {
+    console.error("Error adding doctor:", error);
+    return Helper.response(false, error?.message, {}, res, 500);
+  }
+};
+
+exports.getallDoctorList = async (req, res) => {
+  try {
+    const data = await Doctor.findAll({
+      raw: true,
+
+      order: [["id", "desc"]],
+    });
+
+    if (data.length > 0) {
+      const finalData = await Promise.all(
+        data.map(async (item) => {
+          const qualification_data = await Qualification.findAll({
+            where: {
+              doctorId: item?.id,
+            },
+            raw: true,
+            order: [["id", "desc"]],
+          });
+          const speciality = await speclization.findAll({
+            where: { id: item.speciality },
+            attributes: [
+              ["id", "value"],
+              ["name", "label"],
+            ],
+
+            raw: true,
+            order: [["id", "desc"]],
+          });
+
+          return {
+            ...item,
+            profile_image: item?.profileImage,
+            referral_code: item?.refferalCode,
+            pin_code: item?.pinCode,
+            addhar_no: item?.addharNo,
+            university_name: item?.universityName,
+            registration_no: item?.registrationNo,
+            registration_date: item?.registrationDate,
+            father_name: item?.fatherName,
+            mother_name: item?.motherName,
+            pan_no: item?.panNo,
+            consultancy_charge: item?.consultancyCharge,
+            addhar_front_image: item?.addharFrontImage,
+            addhar_back_image: item?.addharBackImage,
+            text_consult: item?.textConsult,
+            phone_consult: item?.phoneConsult,
+            mobile: item?.phone,
+            qualification_data: qualification_data,
+            KYC_status: item?.KYCstatus,
+            speciality: speciality ?? 0,
+            known_language: [item?.known_language],
+          };
+        })
+      );
+
+      return Helper.response(
+        true,
+        "Data Found Successfully",
+        finalData,
+        res,
+        200
+      );
+    } else {
+      return Helper.response(false, "No Data Found", [], res, 200);
+    }
+  } catch (error) {
+    console.error("Error adding doctor:", error);
+    return Helper.response(false, error?.message, {}, res, 500);
+  }
+};
+
+exports.getallDoctordd = async (req, res) => {
+  try {
+    const data = await Doctor.findAll({
+      raw: true,
+      attributes: [
+        [col("id"), "value"],
+        [col("name"), "label"],
+      ],
+      order: [["id", "desc"]],
+    });
+
+    if (data.length > 0) {
+      return Helper.response(true, "Data Found Successfully", data, res, 200);
+    } else {
+      return Helper.response(false, "No Data Found", [], res, 200);
+    }
+  } catch (error) {
+    console.error("Error adding doctor:", error);
+    return Helper.response(false, error?.message, {}, res, 500);
+  }
+};
+
+exports.getallDoctorById = async (req, res) => {
+  try {
+    const { id } = req.body;
+    const data = await Doctor.findAll({
+      raw: true,
+      where: {
+        id,
+      },
+      order: [["id", "desc"]],
+    });
+    if (data.length > 0) {
+      const finalData = await Promise.all(
+        data.map(async (item) => {
+          // Fetch qualification list
+          const qualification_data = await Qualification.findAll({
+            where: { doctorId: item?.id },
+            raw: true,
+          });
+          let state, district, speciality;
+          if (item.stateId) {
+            // Fetch state details
+            state = await State.findOne({
+              where: { pk_uniqueid: item.stateId },
+              attributes: [
+                ["pk_uniqueid", "value"],
+                ["state_name_en", "label"],
+              ],
+              raw: true,
+            });
+          }
+          if (item.cityId != "undefined") {
+            district = await District.findOne({
+              where: { pk_uniqueid: item?.cityId },
+              attributes: [
+                ["pk_uniqueid", "value"],
+                ["district_name_en", "label"],
+              ],
+              raw: true,
+            });
+          }
+          if (item.speciality) {
+            // Fetch specialization details
+            speciality = item?.speciality
+              ? await speclization.findOne({
+                  where: { id: item.speciality },
+                  attributes: [
+                    ["id", "value"],
+                    ["name", "label"],
+                  ],
+                  order: [["id", "desc"]],
+                  raw: true,
+                })
+              : null;
+          }
+
+          return {
+            ...item,
+            profile_image: item?.profileImage ?? null,
+            refferal_code: item?.refferalCode ?? null,
+            pin_code: item?.pinCode ?? null,
+            addhar_no: item?.addharNo ?? null,
+            university_name: item?.universityName ?? null,
+            registration_no: item?.registrationNo ?? null,
+            registration_date: item?.registrationDate ?? null,
+            father_name: item?.fatherName ?? null,
+            mother_name: item?.motherName ?? null,
+            pan_no: item?.panNo ?? null,
+            consultancy_charge: item?.consultancyCharge ?? null,
+            addhar_front_image: item?.addharFrontImage ?? null,
+            addhar_back_image: item?.addharBackImage ?? null,
+            text_consult: item?.textConsult ?? null,
+            phone_consult: item?.phoneConsult ?? null,
+            mobile: item?.phone ?? null,
+            qualification_data,
+            state,
+            city: district,
+            specialization: speciality,
+            known_language: item?.known_language ? [item.known_language] : [],
+            cert_image: item?.cert_image ?? null,
+            start_time: item?.start_time ?? null,
+            end_time: item?.end_time ?? null,
+          };
+        })
+      );
+
+      return Helper.response(
+        true,
+        "Data Found Successfully",
+        finalData[0],
+        res,
+        200
+      );
+    } else {
+      return Helper.response(false, "No Data Found", [], res, 200);
+    }
+  } catch (error) {
+    console.error("Error adding doctor:", error);
+    return Helper.response(false, error?.message, {}, res, 500);
+  }
+};
+
+exports.addspeclization = async (req, res) => {
+  try {
+    const { name, status = true } = req.body;
+
+    if (!name) {
+      return Helper.response(false, "speclization is required", [], res, 400);
+    }
+    const existingProductType = await speclization.findOne({ where: { name } });
+    if (existingProductType) {
+      return Helper.response(
+        false,
+        "speclization name already exists",
+        [],
+        res,
+        409
+      );
+    }
+
+    const unit = await speclization.create({
+      name,
+      status,
+      createdBy: req.users.id,
+    });
+    return Helper.response(
+      true,
+      "speclization added successfully",
+      unit,
+      res,
+      201
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error adding speclization",
+      res,
+      500
+    );
+  }
+};
+exports.getAllspeclization = async (req, res) => {
+  try {
+    const Units = await speclization.findAll({
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No speclization found", [], res, 404);
+    }
+    return Helper.response(
+      true,
+      "speclization fetched successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching speclization",
+      res,
+      500
+    );
+  }
+};
+
+exports.getAllspeclizationDD = async (req, res) => {
+  try {
+    const Units = await speclization.findAll({
+      attributes: [
+        [col("id"), "value"],
+        [col("name"), "label"],
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No speclization found", [], res, 404);
+    }
+    return Helper.response(
+      true,
+      "speclization fetched successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching speclization",
+      res,
+      500
+    );
+  }
+};
+
+exports.updatespeclization = async (req, res) => {
+  try {
+    const { id, name, status } = req.body;
+    if (!id) {
+      return Helper.response(false, "ID is required", [], res, 400);
+    }
+    // if (!name) {
+    //   return Helper.response(false, "Salt name is required", [], res, 400);
+    // }
+
+    const Units = await speclization.findByPk(id);
+    if (!Units) {
+      return Helper.response(false, "Salt not found", [], res, 404);
+    }
+
+    Units.name = name || Units.name;
+    Units.status = status;
+    Units.updatedBy = req.users.id;
+    await Units.save();
+    return Helper.response(true, "Salt updated successfully", Units, res, 200);
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error updating Unit",
+      res,
+      500
+    );
+  }
+};
+
+exports.deletespeclization = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return Helper.response(false, "Salt ID is required", [], res, 400);
+    }
+    const category = await speclization.findByPk(id);
+    if (!category) {
+      return Helper.response(false, "Salt not found", [], res, 404);
+    }
+
+    await speclization.destroy();
+    return Helper.response(true, "Salt deleted successfully", [], res, 200);
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error deleting Salt",
+      res,
+      500
+    );
+  }
+};
+
+exports.updateDoctor = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const {
+      id,
+      referral_code,
+      name,
+      email,
+      mobile,
+      alt_mobile,
+      dob,
+      year_of_completion,
+      gender,
+      experience,
+      registration,
+      bio,
+      state,
+      city,
+      pin_code,
+      known_language,
+      specialization,
+      address,
+      start_time,
+      online_consultation_fees,
+      end_time,
+      availability,
+    } = req.body;
+
+    const body = req.body;
+    const files = req.files;
+
+    if (!id) {
+      return Helper.response(false, "Doctor ID is required", {}, res, 400);
+    }
+
+    const doctor = await Doctor.findByPk(id);
+    if (!doctor) {
+      return Helper.response(false, "Doctor not found", {}, res, 404);
+    }
+
+    const duration = Helper.calculateDuration(start_time, end_time); // convert ms → minutes
+    const updatedData = {
+      refferalCode: referral_code,
+      name,
+      email,
+      phone: mobile,
+      phoneConsult: alt_mobile,
+      address,
+      known_language,
+      experience,
+      speciality: specialization,
+      about: bio,
+      registrationNo: registration,
+      pinCode: pin_code,
+      stateId: state,
+      cityId: city,
+      gender,
+      year_of_completion,
+      availability: availability,
+      end_time: end_time,
+      start_time: start_time,
+      online_consultation_fees: online_consultation_fees,
+      duration,
+      dob: dob ? new Date(dob) : null,
+
+      profileImage: files?.profile_img
+        ? path.basename(files.profile_img[0].path)
+        : doctor.profileImage,
+
+      panNo: files?.pan_img
+        ? path.basename(files.pan_img[0].path)
+        : doctor.panNo,
+
+      addharFrontImage: files?.aadhaar_f_img
+        ? path.basename(files.aadhaar_f_img[0].path)
+        : doctor.addharFrontImage,
+
+      addharBackImage: files?.aadhaar_b_img
+        ? path.basename(files.aadhaar_b_img[0].path)
+        : doctor.addharBackImage,
+
+      cert_image: files?.cert_img
+        ? path.basename(files.cert_img[0].path)
+        : doctor.cert_image,
+    };
+
+    await doctor.update(updatedData, { transaction: t });
+
+    const oldQualifications = await Qualification.findAll({
+      where: { doctorId: id },
+      raw: true,
+      transaction: t,
+    });
+
+    await Qualification.destroy({
+      where: { doctorId: id },
+      transaction: t,
+    });
+
+    const qualifications = [];
+
+    let index = 0;
+    while (body[`qualifications[${index}].degree`]) {
+      const degree = body[`qualifications[${index}].degree`];
+      const certificate_no = body[`qualifications[${index}].certificate_no`];
+      const certificate_type =
+        body[`qualifications[${index}].certificate_type`];
+      const university = body[`qualifications[${index}].university`];
+      const passingYearRaw = body[`qualifications[${index}].passing_year`];
+
+      const passing_year =
+        passingYearRaw && !isNaN(Date.parse(passingYearRaw))
+          ? new Date(passingYearRaw)
+          : null;
+
+      const oldQual = oldQualifications.find(
+        (q) =>
+          (degree && q.degree === degree) ||
+          (certificate_no && q.certificate_no === certificate_no)
+      );
+
+      const certFile = files?.[`qualifications[${index}].certificate`]?.[0]
+        ?.path
+        ? path.basename(files[`qualifications[${index}].certificate`][0].path)
+        : oldQual?.certificate
+        ? oldQual.certificate.replace(/^.*\/upload\//, "") // remove URL path if necessary
+        : null;
+
+      qualifications.push({
+        doctorId: id,
+        degree,
+        passing_year,
+        university: university || null,
+        certificate_no: certificate_no || null,
+        certificate: certFile,
+        certificate_type: certificate_type || null,
+      });
+
+      index++;
+    }
+
+    if (Array.isArray(body.qualifications) && body.qualifications.length > 0) {
+      for (let i = 0; i < body.qualifications.length; i++) {
+        const q = body.qualifications[i];
+
+        const oldQual = oldQualifications.find(
+          (oq) =>
+            (q.degree && oq.degree === q.degree) ||
+            (q.certificate_no && oq.certificate_no === q.certificate_no)
+        );
+
+        const certFile = files?.[`qualifications[${i}].certificate`]?.[0]?.path
+          ? path.basename(files[`qualifications[${i}].certificate`][0].path)
+          : oldQual?.certificate
+          ? oldQual.certificate.replace(/^.*\/upload\//, "")
+          : null;
+
+        qualifications.push({
+          doctorId: id,
+          degree: q.degree,
+          passing_year:
+            q.passing_year && !isNaN(Date.parse(q.passing_year))
+              ? new Date(q.passing_year)
+              : oldQual?.passing_year || null,
+          university: q.university || oldQual?.university || null,
+          certificate_no: q.certificate_no || oldQual?.certificate_no || null,
+          certificate: certFile,
+          certificate_type:
+            q.certificate_type || oldQual?.certificate_type || null,
+        });
+      }
+    }
+
+    if (qualifications.length > 0) {
+      await Qualification.bulkCreate(qualifications, { transaction: t });
+    }
+
+    await t.commit();
+
+    return Helper.response(
+      true,
+      "Doctor details updated successfully.",
+      doctor,
+      res,
+      200
+    );
+  } catch (error) {
+    await t.rollback();
+    console.error("Error updating doctor:", error);
+    return Helper.response(false, error.message, {}, res, 500);
   }
 };

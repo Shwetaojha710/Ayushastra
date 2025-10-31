@@ -50,9 +50,23 @@ const {
   getcouponDD,
   getstatedd,
   getdistrictdd,
+  addDoctor,
+  getallDoctorList,
+  getallDoctorById,
+  addspeclization,
+  getAllspeclization,
+  getAllspeclizationDD,
+  updatespeclization,
+  deletespeclization,
+  updateDoctor,
+  getallDoctordd,
 } = require("../controller/admin/master.js");
 const upload = require("../middleware/upload.js");
 const { Admin } = require("../middleware/auth.js");
+const { addBlog, getAllBlog, updateBlog, deleteBlog } = require("../controller/admin/blog.js");
+const { addVideo, updateVideo, listVideos, deleteVideo } = require("../controller/admin/video.js");
+const { getDashboardData, dashboardOrderTable, getPopularProducts } = require("../controller/admin/dashboard.js");
+const { getOrderList } = require("../controller/admin/checkout.js");
 // const { login, logout, AIlogin,Applogin, verifyOtp, Applogout } = require('../controller/auth/login');
 // const {Admin, AppAdmin} = require('../middleware/auth');
 const router = express.Router();
@@ -60,13 +74,14 @@ router.post("/create-category", Admin, upload.any(), addCategory);
 router.get("/list-category", Admin, getAllCategories);
 router.post("/update-category", Admin, upload.any(), updateCategory);
 router.post("/delete-category", Admin, deleteCategory);
-router.post("/category-dd", Admin, getcategoryDD);
+router.post("/category-dd",  getcategoryDD);
+router.post("/doctor-dd",  getallDoctordd);
 
 router.post("/create-disease", Admin, upload.any(), addDiseases);
 router.get("/list-diseases", Admin, getAllDiseases);
-router.post("/update-diseases", Admin, updateDiseases);
+router.post("/update-diseases", Admin,upload.any(), updateDiseases);
 router.post("/delete-diseases", Admin, deleteDiseases);
-router.post("/disease-dd", Admin, getDiseasesDD);
+router.post("/disease-dd", getDiseasesDD);
 
 router.post("/create-unit", Admin, addUnit);
 router.get("/list-unit", Admin, getAllUnit);
@@ -79,10 +94,10 @@ router.get("/list-brand", Admin, getAllBrand);
 router.post("/brand-dd", getAllBrandDD);
 router.post("/update-brand", Admin, updateBrand);
 // router.post('/delete-unit',Admin,deleteUnit)
-router.post("/create-ingredient", Admin, addingredient);
+router.post("/create-ingredient", Admin, upload.any(), addingredient);
 router.get("/list-ingredient", Admin, getAllIngredient);
 router.post("/ingredients-dd", getAllIngredientDD);
-router.post("/update-ingredient", Admin, updateIngredient);
+router.post("/update-ingredient", Admin, upload.any(),updateIngredient);
 // router.post('/delete-unit',Admin,deleteUnit)
 
 router.post("/create-product-type", Admin, addProductType);
@@ -115,6 +130,46 @@ router.post("/delete-coupon", Admin, deletecoupon);
 
 router.post("/state-dd", Admin, getstatedd);
 router.post("/district-dd", Admin, getdistrictdd);
+const qualificationFields = Array.from({ length: 10 }, (_, i) => ({
+  name: `qualifications[${i}].certificate`,
+  maxCount: 1,
+}));
+router.post("/add-doctor", Admin, upload.fields([
+  { name: "profile_img", maxCount: 1 },
+  { name: "pan_img", maxCount: 1 },
+  { name: "aadhaar_f_img", maxCount: 1 },
+  { name: "aadhaar_b_img", maxCount: 1 },
+  { name: "cert_img", maxCount: 1 },  ...qualificationFields, 
 
+]),addDoctor);
+router.get("/list-doctor", Admin, getallDoctorList);
+router.post("/doctor-by-id", Admin, getallDoctorById);
+router.post("/create-specialization", Admin, addspeclization);
+router.get("/list-specialization", Admin, getAllspeclization);
+router.post("/specialization-dd", Admin, getAllspeclizationDD);
+router.post("/update-specialization", Admin, updatespeclization);
+router.post("/delete-specialization", Admin, deletespeclization);
+
+router.post("/update-doctor", Admin, upload.fields([
+  { name: "profile_img", maxCount: 1 },
+  { name: "pan_img", maxCount: 1 },
+  { name: "aadhaar_f_img", maxCount: 1 },
+  { name: "aadhaar_b_img", maxCount: 1 },
+  { name: "cert_img", maxCount: 1 },  ...qualificationFields, 
+
+]),updateDoctor)
+
+router.post("/add-blog", Admin, upload.any(), addBlog);
+router.get("/list-blog", Admin, getAllBlog);
+router.post("/update-blog", Admin, upload.any(), updateBlog);
+router.post("/delete-blog", Admin, deleteBlog);
+router.post("/add-video-article", Admin, upload.any(), addVideo);
+router.get("/list-video-article", Admin, listVideos);
+router.post("/update-video-article", Admin, upload.any(), updateVideo);
+router.post("/delete-video-article", Admin, deleteVideo);
+
+router.get("/dashboard", Admin, getDashboardData);
+router.post("/dashboard-order-table", Admin, dashboardOrderTable);
+router.post("/dashboard-popular-products", Admin, getPopularProducts);
 
 module.exports = router;

@@ -66,7 +66,6 @@ const Product = sequelize.define(
 
     sku: {
       type: DataTypes.STRING,
-      unique: true,
       allowNull: false,
     },
 
@@ -150,6 +149,10 @@ const Product = sequelize.define(
       defaultValue: true,
     },
     unit: {
+      type: DataTypes.INTEGER,
+      defaultValue: true,
+    },
+    rating: {
       type: DataTypes.INTEGER,
       defaultValue: true,
     },

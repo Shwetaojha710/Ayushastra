@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../app/connection/connection");
+const { duration } = require("moment/moment");
 
 const Doctor = sequelize.define("doctor", {
   id: {
@@ -53,11 +54,19 @@ const Doctor = sequelize.define("doctor", {
       min: { args: [0], msg: "Age cannot be negative" },
     },
   },
+  known_language:{
+    type:DataTypes.STRING,
+    allowNull:true
+  },
   address: {
     type: DataTypes.STRING,
     allowNull: true,
   },
   profileImage: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  cert_image: {
     type: DataTypes.STRING,
     allowNull: true,
   },
@@ -108,6 +117,10 @@ const Doctor = sequelize.define("doctor", {
     type: DataTypes.STRING,
     allowNull: true,
   },
+   experience: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
    universityName: {
     type: DataTypes.STRING,
     allowNull: true,
@@ -152,16 +165,35 @@ const Doctor = sequelize.define("doctor", {
       },
     },
   },
-  status: {
-    type: DataTypes.ENUM("active", "inactive"),
-    defaultValue: "active",
+  // status: {
+  //   type: DataTypes.ENUM("active", "inactive"),
+  //   defaultValue: "active",
+  //   allowNull: false,
+  //   validate: {
+  //     isIn: {
+  //       args: [["active", "inactive"]],
+  //       msg: "Status must be active or inactive",
+  //     },
+  //   },
+  // },
+   status: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+  KYCstatus: {
+    type: DataTypes.ENUM("pending", "approved","rejected"),
+    defaultValue: "pending",
     allowNull: false,
     validate: {
       isIn: {
-        args: [["active", "inactive"]],
-        msg: "Status must be active or inactive",
+        args: [["pending", "approved","rejected"]],
+        msg: "Status must be pending,approved or rejected",
       },
     },
+  },
+  year_of_completion:{
+  type:DataTypes.DATEONLY,
+  allowNull:true
   },
   joinDate: {
     type: DataTypes.DATEONLY,
@@ -191,8 +223,32 @@ const Doctor = sequelize.define("doctor", {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  phone: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   phoneConsult: {
     type: DataTypes.STRING,
+    allowNull: true,
+  },
+  start_time: {
+    type: DataTypes.TIME,
+    allowNull: true,
+  },
+  end_time: {
+    type: DataTypes.TIME,
+    allowNull: true,
+  },
+  duration: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  availability: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  online_consultation_fees: {
+    type: DataTypes.INTEGER,
     allowNull: true,
   },
   token: {
@@ -211,7 +267,7 @@ const Doctor = sequelize.define("doctor", {
   },
 });
 
-// Doctor.sync()
+// Doctor.sync({alter:true})
 //   .then(() => {
 //     console.log("Doctor model synced successfully");
 //   })

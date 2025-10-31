@@ -121,15 +121,15 @@ exports.getAllCategories = async (req, res) => {
       raw: true,
     });
 
-    // console.log(menudata,"menudattaa111")
+
     if (categories.length > 0) {
-      // Create a map for quick lookup
+    
       const map = {};
       categories.forEach((item) => {
         map[item.id] = { ...item, subcategory: [] };
       });
 
-      //  Build the tree structure
+ 
       let tree = [];
       categories.forEach((item) => {
         if (item.parent_id !== 0) {
@@ -289,6 +289,8 @@ exports.getcategoryDD = async (req, res) => {
       attributes: [
         [col("id"), "value"],
         [col("name"), "label"],
+        "order",
+        "image"
       ],
       order: [["order", "ASC"]],
       raw: true,
@@ -310,7 +312,7 @@ exports.getcategoryDD = async (req, res) => {
     return Helper.response(
       false,
       error.message,
-      "Error deleting Salt",
+      "Error Getting Category",
       res,
       500
     );

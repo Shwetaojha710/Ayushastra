@@ -9,7 +9,6 @@ const path = require('path')
 
 const port = process.env.SERVER_PORT || 9000
 app.use(express.json())
-
 app.use(cors({
   origin: (origin, callback) => {
     callback(null, origin || true);

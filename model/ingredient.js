@@ -11,6 +11,18 @@ const ingredient = sequelize.define("ingredient", {
         type: DataTypes.STRING,
         allowNull: false,
     },
+    doc_type: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    image: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
       status: {
         type: DataTypes.BOOLEAN,
         defaultValue: true

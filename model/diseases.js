@@ -19,6 +19,10 @@ const Diseases = sequelize.define("diseases", {
         type: DataTypes.STRING,
         allowNull: false,
     },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
          status: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
