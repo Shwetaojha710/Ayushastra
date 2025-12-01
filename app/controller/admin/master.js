@@ -1,26 +1,31 @@
-const Diseases = require("../../../model/diseases.js");
-const Ingredient = require("../../../model/ingredient.js");
-const ProductType = require("../../../model/product_type.js");
-const Unit = require("../../../model/unit.js");
-const Brand = require("../../../model/brand.js");
+const Diseases = require("../../model/diseases.js");
+const Ingredient = require("../../model/ingredient.js");
+const ProductType = require("../../model/product_type.js");
+const Unit = require("../../model/unit.js");
+const Brand = require("../../model/brand.js");
 const Helper = require("../../helper/helper.js");
-const Salt = require("../../../model/salt.js");
-const Product = require("../../../model/product.js");
-const product_gallery = require("../../../model/product_gallery.js");
-const { Op, col } = require("sequelize");
+const Salt = require("../../model/salt.js");
+const Product = require("../../model/product.js");
+const product_gallery = require("../../model/product_gallery.js");
+const { Op, col, fn } = require("sequelize");
 const sequelize = require("../../connection/connection.js");
-const ingredient = require("../../../model/ingredient.js");
-const Category = require("../../../model/category.js");
+const ingredient = require("../../model/ingredient.js");
+const Category = require("../../model/category.js");
 const slugify = require("slugify");
-const banner = require("../../../model/banner.js");
-const coupons = require("../../../model/coupon.js");
-const State = require("../../../model/state.js");
-const District = require("../../../model/district.js");
-const Doctor = require("../../../model/doctor.js");
-const Qualification = require("../../../model/qualification.js");
+const banner = require("../../model/banner.js");
+const coupons = require("../../model/coupon.js");
+const State = require("../../model/state.js");
+const District = require("../../model/district.js");
+const Doctor = require("../../model/doctor.js");
+const Qualification = require("../../model/qualification.js");
 const path = require("path");
-const speclization = require("../../../model/specilization.js");
+const speclization = require("../../model/specilization.js");
 const { diff } = require("util");
+const registered_user = require("../../model/registeredusers.js");
+const fs = require("fs");
+const moment = require("moment");
+const DoctorSlot = require("../../model/doctor_slots.js");
+const CityMaster = require("../../model/city_master.js");
 // product_gallery
 
 exports.addDiseases = async (req, res) => {
@@ -476,7 +481,7 @@ exports.addingredient = async (req, res) => {
     }
 
     for (const file of req.files) {
-      const newDoc = await Ingredient.create({
+      let newDoc = await Ingredient.create({
         name,
         status,
         description,
@@ -595,7 +600,7 @@ exports.getAllIngredientDD = async (req, res) => {
 
 exports.updateIngredient = async (req, res) => {
   try {
-    const { id, name, status, description} = req.body;
+    const { id, name, status, description } = req.body;
 
     if (!id) {
       return Helper.response(false, "Category ID is required", [], res, 400);
@@ -604,7 +609,7 @@ exports.updateIngredient = async (req, res) => {
     //   return Helper.response(false, "Category name is required", [], res, 400);
     // }
 
-  const ingredient = await Ingredient.findByPk(id);
+    const ingredient = await Ingredient.findByPk(id);
     if (!ingredient) {
       return Helper.response(false, "Ingredient not found", [], res, 404);
     }
@@ -619,7 +624,7 @@ exports.updateIngredient = async (req, res) => {
       ingredient.doc_type = file.mimetype;
     }
 
-      ingredient.name = name || ingredient.name;
+    ingredient.name = name || ingredient.name;
     ingredient.status = status;
     ingredient.description = description || ingredient?.description;
     ingredient.updatedBy = req.users.id;
@@ -986,6 +991,9 @@ exports.addProduct = async (req, res) => {
       short_description,
       ingredients,
       meta_tags,
+      final_price,
+      discount_type,
+      product_meta_title,
     } = req.body;
 
     if (!product_name || !sku || !mrp || !category) {
@@ -1045,6 +1053,9 @@ exports.addProduct = async (req, res) => {
         extra_product_details: extra_product_description,
         isFragile: fragile === "true" || fragile === true,
         unit,
+        final_price,
+        discount_type,
+        product_meta_title,
       },
       { transaction: t }
     );
@@ -1280,6 +1291,9 @@ exports.updateProduct = async (req, res) => {
       short_description: req.body.short_description,
       tags: req.body.meta_tags,
       slug,
+      discount_type: req.body.discount_type,
+      final_price: req.body.final_price,
+      product_meta_title: req.body.product_meta_title? req.body.product_meta_title: product?.product_meta_title,
     };
 
     // Update meta image if uploaded
@@ -1525,7 +1539,7 @@ exports.getcoupon = async (req, res) => {
       order: [["createdAt", "DESC"]],
       raw: true,
     });
-    if (Coupons.length === 0) {
+    if (Coupons.length == 0) {
       return Helper.response(false, "No Coupons found", [], res, 404);
     }
 
@@ -1540,10 +1554,21 @@ exports.getcoupon = async (req, res) => {
             [col("product_name"), "label"],
           ],
         });
+        const user = await registered_user.findOne({
+          where: {
+            id: item.user_id,
+          },
+          attributes: [
+            [col("id"), "value"],
+            [fn("CONCAT", col("first_name"), " ", col("last_name")), "label"],
+          ],
+        });
+
         return {
           ...item,
           product_name: product?.label,
           products: product,
+          user: user,
         };
       })
     );
@@ -1610,6 +1635,8 @@ exports.updatecoupon = async (req, res) => {
       end_time,
       usage_per_user,
       coupon_count,
+      discount_type,
+      user_id,
     } = req.body;
     if (!id) {
       return Helper.response(false, "ID is required", [], res, 400);
@@ -1632,6 +1659,8 @@ exports.updatecoupon = async (req, res) => {
     coupon.coupon_count = coupon_count;
     coupon.status = status;
     coupon.description = description;
+    coupon.discount_type = discount_type ?? coupon?.discount_type;
+    coupon.user_id = user_id ?? coupon?.user_id;
     coupon.updatedBy = req.users.id;
     await coupon.save();
     return Helper.response(
@@ -1774,6 +1803,20 @@ exports.addDoctor = async (req, res) => {
 
     const diffMs = end - start; // difference in milliseconds
     const duration = Math.floor(diffMs / 60000); // convert ms → minutes
+
+    let referral_code;
+    let isUnique = false;
+
+    // ensure uniqueness
+    while (!isUnique) {
+      referral_code = Helper.generateDoctorReferralCode(body.name);
+
+      const exists = await Doctor.findOne({
+        where: { refferalCode: referral_code },
+      });
+      if (!exists) isUnique = true;
+    }
+
     // Build doctor data
     const doctorData = {
       loginId: 1, // Or req.user.id if using auth
@@ -1783,7 +1826,7 @@ exports.addDoctor = async (req, res) => {
       gender: body.gender,
       dob: new Date(body.dob),
       age: calculateAge(body.dob),
-      refferalCode: body.referral_code,
+      // refferalCode: body.referral_code,
       address: body.address,
       cityId: body.city,
       stateId: body.state,
@@ -1816,6 +1859,8 @@ exports.addDoctor = async (req, res) => {
         ? `${path.basename(files.cert_img[0].path)}`
         : null,
       known_language: body.known_language,
+      refferalCode: referral_code,
+      refferedBy: body.refferedBy,
     };
 
     // Save doctor
@@ -1869,77 +1914,204 @@ exports.addDoctor = async (req, res) => {
     return Helper.response(false, error?.message, {}, res, 500);
   }
 };
-
 exports.getallDoctorList = async (req, res) => {
   try {
     const data = await Doctor.findAll({
       raw: true,
-
       order: [["id", "desc"]],
     });
 
-    if (data.length > 0) {
-      const finalData = await Promise.all(
-        data.map(async (item) => {
-          const qualification_data = await Qualification.findAll({
-            where: {
-              doctorId: item?.id,
-            },
-            raw: true,
-            order: [["id", "desc"]],
-          });
-          const speciality = await speclization.findAll({
-            where: { id: item.speciality },
-            attributes: [
-              ["id", "value"],
-              ["name", "label"],
-            ],
-
-            raw: true,
-            order: [["id", "desc"]],
-          });
-
-          return {
-            ...item,
-            profile_image: item?.profileImage,
-            referral_code: item?.refferalCode,
-            pin_code: item?.pinCode,
-            addhar_no: item?.addharNo,
-            university_name: item?.universityName,
-            registration_no: item?.registrationNo,
-            registration_date: item?.registrationDate,
-            father_name: item?.fatherName,
-            mother_name: item?.motherName,
-            pan_no: item?.panNo,
-            consultancy_charge: item?.consultancyCharge,
-            addhar_front_image: item?.addharFrontImage,
-            addhar_back_image: item?.addharBackImage,
-            text_consult: item?.textConsult,
-            phone_consult: item?.phoneConsult,
-            mobile: item?.phone,
-            qualification_data: qualification_data,
-            KYC_status: item?.KYCstatus,
-            speciality: speciality ?? 0,
-            known_language: [item?.known_language],
-          };
-        })
-      );
-
-      return Helper.response(
-        true,
-        "Data Found Successfully",
-        finalData,
-        res,
-        200
-      );
-    } else {
+    if (data.length === 0) {
       return Helper.response(false, "No Data Found", [], res, 200);
     }
+
+    const finalData = await Promise.all(
+      data.map(async (item) => {
+        // -----------------------------
+        // Convert speciality into array
+        // -----------------------------
+        let specialityIds = [];
+
+        if (item.speciality) {
+          try {
+            if (Array.isArray(item.speciality)) {
+              specialityIds = item.speciality;
+            } else if (typeof item.speciality === "string") {
+              // JSON string?
+              if (item.speciality.startsWith("["))
+                specialityIds = JSON.parse(item.speciality);
+              else
+                specialityIds = item.speciality.split(",").map((e) => +e.trim());
+            } else {
+              specialityIds = [item.speciality];
+            }
+          } catch (err) {
+            specialityIds = [];
+          }
+        }
+
+        // -----------------------------
+        // Get Qualification
+        // -----------------------------
+        const qualification_data = await Qualification.findAll({
+          where: { doctorId: item.id },
+          raw: true,
+          order: [["id", "desc"]],
+        });
+
+        // -----------------------------
+        // Get Speciality Labels
+        // -----------------------------
+        const specialityData =
+          specialityIds.length > 0
+            ? await speclization.findAll({
+                where: {
+                  id: { [Op.in]: specialityIds },
+                },
+                attributes: [
+                  ["id", "value"],
+                  ["name", "label"],
+                ],
+                raw: true,
+                order: [["id", "desc"]],
+              })
+            : [];
+
+        return {
+          ...item,
+
+          // Normalized fields
+          profile_image: item.profileImage,
+          referral_code: item.refferalCode,
+          pin_code: item.pinCode,
+          addhar_no: item.addharNo,
+          university_name: item.universityName,
+          registration_no: item.registrationNo,
+          registration_date: item.registrationDate,
+          father_name: item.fatherName,
+          mother_name: item.motherName,
+          pan_no: item.panNo,
+          consultancy_charge: item.consultancyCharge,
+          addhar_front_image: item.addharFrontImage,
+          addhar_back_image: item.addharBackImage,
+          text_consult: item.textConsult,
+          phone_consult: item.phoneConsult,
+          mobile: item.phone,
+          KYC_status: item.KYCstatus,
+
+          // Arrays
+          qualification_data,
+          speciality: specialityData,
+          known_language: item.known_language
+            ? Array.isArray(item.known_language)
+              ? item.known_language
+              : [item.known_language]
+            : [],
+
+          // Derived
+          degree:
+            qualification_data.length > 0
+              ? qualification_data
+                  .map((q) => q.degree)
+                  .filter(Boolean)
+                  .join(",")
+              : null,
+        };
+      })
+    );
+
+    return Helper.response(
+      true,
+      "Data Found Successfully",
+      finalData,
+      res,
+      200
+    );
   } catch (error) {
-    console.error("Error adding doctor:", error);
-    return Helper.response(false, error?.message, {}, res, 500);
+    console.error("Error fetching doctor list:", error);
+    return Helper.response(false, error.message, {}, res, 500);
   }
 };
+
+
+// exports.getallDoctorList = async (req, res) => {
+//   try {
+//     const data = await Doctor.findAll({
+//       raw: true,
+
+//       order: [["id", "desc"]],
+//     });
+
+//     if (data.length > 0) {
+//       const finalData = await Promise.all(
+//         data.map(async (item) => {
+//           console.log(item.id,item.speciality);
+          
+//           const qualification_data =  item?.id ? await Qualification.findAll({
+//             where: {
+//               doctorId: item?.id,
+//             },
+//             raw: true,
+//             order: [["id", "desc"]],
+//           }) :null;
+//           const speciality = item.speciality? await speclization.findAll({
+//             where: {
+//               id: {
+//                 [Op.in]: item.speciality,
+//               },
+//             },
+//             attributes: [
+//               ["id", "value"],
+//               ["name", "label"],
+//             ],
+//             raw: true,
+//             order: [["id", "desc"]],
+//           }):null;
+
+//           return {
+//             ...item,
+//             profile_image: item?.profileImage,
+//             referral_code: item?.refferalCode,
+//             pin_code: item?.pinCode,
+//             addhar_no: item?.addharNo,
+//             university_name: item?.universityName,
+//             registration_no: item?.registrationNo,
+//             registration_date: item?.registrationDate,
+//             father_name: item?.fatherName,
+//             mother_name: item?.motherName,
+//             pan_no: item?.panNo,
+//             consultancy_charge: item?.consultancyCharge,
+//             addhar_front_image: item?.addharFrontImage,
+//             addhar_back_image: item?.addharBackImage,
+//             text_consult: item?.textConsult,
+//             phone_consult: item?.phoneConsult,
+//             mobile: item?.phone,
+//             qualification_data: qualification_data,
+//             KYC_status: item?.KYCstatus,
+//             speciality: speciality ?? 0,
+//             known_language: [item?.known_language],
+//             degree: qualification_data.length>0
+//               ? qualification_data.map((item) => item?.degree).join(",")
+//               : null,
+//           };
+//         })
+//       );
+
+//       return Helper.response(
+//         true,
+//         "Data Found Successfully",
+//         finalData,
+//         res,
+//         200
+//       );
+//     } else {
+//       return Helper.response(false, "No Data Found", [], res, 200);
+//     }
+//   } catch (error) {
+//     console.error("Error adding doctor:", error);
+//     return Helper.response(false, error?.message, {}, res, 500);
+//   }
+// };
 
 exports.getallDoctordd = async (req, res) => {
   try {
@@ -2174,19 +2346,25 @@ exports.updatespeclization = async (req, res) => {
 
     const Units = await speclization.findByPk(id);
     if (!Units) {
-      return Helper.response(false, "Salt not found", [], res, 404);
+      return Helper.response(false, "Speclization not found", [], res, 404);
     }
 
     Units.name = name || Units.name;
     Units.status = status;
     Units.updatedBy = req.users.id;
     await Units.save();
-    return Helper.response(true, "Salt updated successfully", Units, res, 200);
+    return Helper.response(
+      true,
+      "Speclization updated successfully",
+      Units,
+      res,
+      200
+    );
   } catch (error) {
     return Helper.response(
       false,
       error.message,
-      "Error updating Unit",
+      "Error updating Speclization",
       res,
       500
     );
@@ -2244,6 +2422,8 @@ exports.updateDoctor = async (req, res) => {
       online_consultation_fees,
       end_time,
       availability,
+      status,
+      is_feature,
     } = req.body;
 
     const body = req.body;
@@ -2260,29 +2440,31 @@ exports.updateDoctor = async (req, res) => {
 
     const duration = Helper.calculateDuration(start_time, end_time); // convert ms → minutes
     const updatedData = {
-      refferalCode: referral_code,
-      name,
-      email,
-      phone: mobile,
-      phoneConsult: alt_mobile,
-      address,
-      known_language,
-      experience,
-      speciality: specialization,
-      about: bio,
-      registrationNo: registration,
-      pinCode: pin_code,
-      stateId: state,
-      cityId: city,
-      gender,
-      year_of_completion,
-      availability: availability,
-      end_time: end_time,
-      start_time: start_time,
-      online_consultation_fees: online_consultation_fees,
-      duration,
-      dob: dob ? new Date(dob) : null,
-
+      refferalCode: referral_code ?? doctor?.referral_code,
+      name: name ?? doctor?.name,
+      email: email ?? doctor?.email,
+      phone: mobile ?? doctor?.phone,
+      phoneConsult: alt_mobile ?? doctor?.alt_mobile,
+      is_feature: is_feature ?? doctor?.is_feature,
+      address: address ?? doctor?.address,
+      known_language: known_language ?? doctor?.known_language,
+      experience: experience ?? doctor?.experience,
+      speciality: specialization ?? doctor?.speciality,
+      about: bio ?? doctor?.about,
+      registrationNo: registration ?? doctor?.registrationNo,
+      pinCode: pin_code ?? doctor?.pinCode,
+      stateId: state ?? doctor?.stateId,
+      cityId: city ?? doctor?.cityId,
+      gender: gender ?? doctor?.gender,
+      year_of_completion: year_of_completion ?? doctor?.year_of_completion,
+      availability: availability ?? doctor?.availability,
+      end_time: end_time ?? doctor?.end_time,
+      start_time: start_time ?? doctor?.start_time,
+      online_consultation_fees:
+        online_consultation_fees ?? doctor?.online_consultation_fees,
+      duration: duration ?? doctor?.duration,
+      dob: dob ? new Date(dob) : doctor?.dob,
+      status: status ?? doctor?.status,
       profileImage: files?.profile_img
         ? path.basename(files.profile_img[0].path)
         : doctor.profileImage,
@@ -2309,11 +2491,6 @@ exports.updateDoctor = async (req, res) => {
     const oldQualifications = await Qualification.findAll({
       where: { doctorId: id },
       raw: true,
-      transaction: t,
-    });
-
-    await Qualification.destroy({
-      where: { doctorId: id },
       transaction: t,
     });
 
@@ -2392,6 +2569,10 @@ exports.updateDoctor = async (req, res) => {
     }
 
     if (qualifications.length > 0) {
+      await Qualification.destroy({
+        where: { doctorId: id },
+        transaction: t,
+      });
       await Qualification.bulkCreate(qualifications, { transaction: t });
     }
 
@@ -2408,5 +2589,593 @@ exports.updateDoctor = async (req, res) => {
     await t.rollback();
     console.error("Error updating doctor:", error);
     return Helper.response(false, error.message, {}, res, 500);
+  }
+};
+
+exports.userDropDown = async (req, res) => {
+  try {
+    const User = await registered_user.findAll({
+      attributes: [
+        [col("id"), "value"],
+        [fn("CONCAT", col("first_name"), " ", col("last_name")), "label"],
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (User.length === 0) {
+      return Helper.response(false, "No User found", [], res, 404);
+    }
+    return Helper.response(true, "User fetched successfully", User, res, 200);
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching User",
+      res,
+      500
+    );
+  }
+};
+
+exports.addDoctorSlots = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { doctor_id, slots, sync, type } = req.body;
+
+    if (!doctor_id || !slots || Object.keys(slots).length === 0) {
+      return Helper.response(
+        false,
+        "doctor_id and slots are required",
+        [],
+        res,
+        400
+      );
+    }
+
+    const doctor = await Doctor.findOne({
+      where: {
+        id: doctor_id,
+     
+      },
+    });
+    if (!doctor) {
+      return Helper.response(false, "Doctor not found", [], res, 404);
+    }
+
+    await DoctorSlot.destroy({
+      where: { doctorId: doctor_id ,
+        session_type:type},
+      transaction: t,
+    });
+
+    const allSlots = [];
+
+    for (const [day, daySlots] of Object.entries(slots)) {
+      for (const slot of daySlots) {
+        allSlots.push({
+          doctorId: doctor_id,
+          day,
+          duration: parseInt(slot.duration, 10),
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          whatsApp: slot?.whatsApp,
+          fees: parseFloat(slot.fees || 0),
+          session_type: type || "offline", // Default: offline
+          clinic_name: slot.clinic_name || null,
+          clinic_address: slot.clinic_address || null,
+          is_online: slot.session_type == "online" ? true : false,
+          sync: sync ? true : false,
+        });
+      }
+    }
+
+    // Bulk insert all slots
+    const savedSlots = await DoctorSlot.bulkCreate(allSlots, {
+      transaction: t,
+    });
+    await t.commit();
+
+    return Helper.response(
+      true,
+      "Doctor slots added successfully",
+      savedSlots,
+      res,
+      200
+    );
+  } catch (err) {
+    await t.rollback();
+    console.error("Error adding doctor slots:", err);
+    return Helper.response(
+      false,
+      err?.message || "Failed to add doctor slots",
+      [],
+      res,
+      500
+    );
+  }
+};
+
+exports.getDoctorSlot = async (req, res) => {
+  try {
+    const { doctor_id, type = "online", sync = false } = req.body;
+
+    if (!doctor_id) {
+      return Helper.response(false, "doctor_id is required", [], res, 400);
+    }
+
+    const doctor = await Doctor.findByPk(doctor_id);
+    if (!doctor) {
+      return Helper.response(false, "Doctor not found", [], res, 404);
+    }
+
+    const where = { doctorId: doctor_id };
+    if (type) where.session_type = type;
+
+    const slots = await DoctorSlot.findAll({
+      where,
+      order: [
+        ["day", "ASC"],
+        ["start_time", "ASC"],
+      ],
+      raw: true,
+    });
+
+    // Initialize grouped slots by weekday
+    const groupedSlots = {
+      monday: [],
+      tuesday: [],
+      wednesday: [],
+      thursday: [],
+      friday: [],
+      saturday: [],
+      sunday: [],
+    };
+
+    for (const slot of slots) {
+      if (groupedSlots[slot.day]) {
+        groupedSlots[slot.day].push({
+          duration: slot.duration?.toString(),
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          fees: parseFloat(slot.fees).toFixed(2),
+          session_type: slot.session_type,
+          clinic_name: slot.clinic_name || null,
+          clinic_address: slot?.clinic_address || null,
+          clinic_image_1: slot?.clinic_image_1 || null,
+          clinic_image_2: slot?.clinic_image_2 || null,
+          emergency_fees: slot?.emergency_fees || null,
+          whatsApp: slot?.whatsApp || null,
+          pin_code: slot?.pin_code || null,
+          id: slot.id || null,
+        });
+      }
+    }
+
+    const responseData = {
+      doctor_id,
+      type,
+      sync, // added here
+      slots: groupedSlots,
+    };
+
+    return Helper.response(
+      true,
+      "Doctor slots fetched successfully",
+      responseData,
+      res,
+      200
+    );
+  } catch (error) {
+    console.error("Error fetching doctor slots:", error);
+    return Helper.response(
+      false,
+      error?.message || "Failed to fetch doctor slots",
+      [],
+      res,
+      500
+    );
+  }
+};
+
+exports.updateDoctorSlots = async (req, res) => {
+  try {
+    const doctorId = req.body.doctorId;
+    const { to_all_online, slots, fees, type } = req.body;
+
+    if (!doctorId) {
+      return Helper.response(false, "doctorId is required", {}, res, 400);
+    }
+
+    if (!slots || typeof slots !== "object") {
+      return Helper.response(false, "Invalid slots data", {}, res, 400);
+    }
+
+    const slotRecord = await DoctorSlot.findOne({
+      where: { doctorId, type: type || "offline" },
+    });
+
+    let data;
+
+    if (slotRecord) {
+      await slotRecord.update({
+        to_all_online,
+        slots,
+        fees,
+        type: type || "offline",
+      });
+      data = slotRecord;
+    } else {
+      data = await DoctorSlot.create({
+        doctorId,
+        to_all_online,
+        slots,
+        fees,
+        type: type || "offline",
+      });
+    }
+
+    return Helper.response(
+      true,
+      "Doctor slots updated successfully",
+      data,
+      res,
+      200
+    );
+  } catch (error) {
+    console.error("Error updating doctor slots:", error);
+    return Helper.response(false, error?.message, error, res, 500);
+  }
+};
+
+exports.addOfflineDoctorSlots = async (req, res) => {
+  const t = await sequelize.transaction();
+
+  try {
+    const { doctor_id ,whatsApp} = req.body;
+
+    if (!doctor_id) {
+      return Helper.response(false, "Doctor ID is required", [], res, 400);
+    }
+
+    const doctor = await Doctor.findOne({ where: { id: doctor_id } });
+    if (!doctor) {
+      return Helper.response(false, "Invalid doctor ID", [], res, 404);
+    }
+
+    const days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+
+    // Helper to extract uploaded file
+    const getFile = (field) => {
+      if (!req.files) return null;
+      const file = req.files.find((f) => f.fieldname === field);
+      return file ? file.filename : null;
+    };
+
+    const finalSlots = [];
+
+    for (const day of days) {
+      let index = 0;
+
+      while (req.body[`slots.${day}.${index}.start_time`] !== undefined) {
+
+        const slot_id = req.body[`slots.${day}.${index}.id`];
+
+        const clinic_name = req.body[`slots.${day}.${index}.clinic_name`] || null;
+        const clinic_address =
+          req.body[`slots.${day}.${index}.clinic_address`] ||
+          req.body[`slots.${day}.${index}.full_address`] ||
+          null;
+
+        const emergency_fees = req.body[`slots.${day}.${index}.emergency_fees`] || 0;
+        const fees = req.body[`slots.${day}.${index}.fees`] || 0;
+        const pin_code = req.body[`slots.${day}.${index}.pin_code`] || null;
+        const address = req.body[`slots.${day}.${index}.address`] || null;
+
+        const start_time = req.body[`slots.${day}.${index}.start_time`] || null;
+        const end_time = req.body[`slots.${day}.${index}.end_time`] || null;
+
+        let duration = req.body[`slots.${day}.${index}.duration`];
+        if (!duration || duration == 0) {
+          duration =
+            start_time && end_time
+              ? moment(end_time, "HH:mm").diff(moment(start_time, "HH:mm"), "minutes")
+              : 0;
+        }
+
+        // Uploaded images (only if present)
+        const new_img1 = getFile(`slots.${day}.${index}.image_url_1`);
+        const new_img2 = getFile(`slots.${day}.${index}.image_url_2`);
+
+        let slotRecord;
+
+        if (slot_id) {
+          // ----------- UPDATE -------------
+          slotRecord = await DoctorSlot.findOne({
+            where: { id: slot_id, doctorId: doctor_id }
+          });
+
+          if (!slotRecord) {
+            return Helper.response(false, "Invalid Slot ID", [], res, 404);
+          }
+
+          await slotRecord.update(
+            {
+              day,
+              session_type: "offline",
+              clinic_name,
+              clinic_address,
+              fees,
+              emergency_fees,
+              pin_code,
+              start_time,
+              end_time,
+              duration,
+              clinic_image_1: new_img1 || slotRecord.clinic_image_1,
+              clinic_image_2: new_img2 || slotRecord.clinic_image_2,
+              address,
+              whatsApp:whatsApp
+            },
+            { transaction: t }
+          );
+
+        } else {
+          slotRecord = await DoctorSlot.create(
+            {
+              doctorId: doctor_id,
+              day,
+              session_type: "offline",
+              clinic_name,
+              clinic_address,
+              fees,
+              emergency_fees,
+              pin_code,
+              start_time,
+              end_time,
+              duration,
+              clinic_image_1: new_img1,
+              clinic_image_2: new_img2,
+              address,
+              whatsApp:whatsApp
+            },
+            { transaction: t }
+          );
+        }
+
+        finalSlots.push(slotRecord);
+        index++;
+      }
+    }
+
+    await t.commit();
+    return Helper.response(true, "Offline doctor slots saved successfully", finalSlots, res, 200);
+
+  } catch (error) {
+    console.error("Doctor Slot Error:", error);
+    await t.rollback();
+    return Helper.response(false, error.message, [], res, 500);
+  }
+};
+
+
+
+// exports.addOfflineDoctorSlots = async (req, res) => {
+//   const t = await sequelize.transaction();
+
+//   try {
+//     const { doctor_id, sync } = req.body;
+
+//     if (!doctor_id) {
+//       return Helper.response(false, "Doctor ID is required", [], res, 400);
+//     }
+
+//     const doctor = await Doctor.findOne({ where: { id: doctor_id } });
+//     if (!doctor) {
+//       return Helper.response(false, "Invalid doctor ID", [], res, 404);
+//     }
+
+//     const syncFlag = sync == 1 ? true : false;
+
+//     // If sync = 1 delete all old slots
+//     if (syncFlag) {
+//       await DoctorSlot.destroy(
+//         { where: { doctorId: doctor_id } },
+//         { transaction: t }
+//       );
+//     }
+
+//     const days = [
+//       "monday", "tuesday", "wednesday", "thursday",
+//       "friday", "saturday", "sunday"
+//     ];
+
+//     const finalSlots = [];
+
+//     for (const day of days) {
+//       let index = 0;
+
+//       while (req.body[`slots.${day}.${index}.start_time`] != undefined) {
+//         const session = "offline";
+
+//         const slot_id = req.body[`slots.${day}.${index}.id`] || null;
+
+//         const clinic_name = req.body[`slots.${day}.${index}.clinic_name`] || null;
+//         const clinic_address =
+//           req.body[`slots.${day}.${index}.clinic_address`] ||
+//           req.body[`slots.${day}.${index}.full_address`] || null;
+
+//         const emergency_fees = req.body[`slots.${day}.${index}.emergency_fees`] || 0;
+//         const fees = req.body[`slots.${day}.${index}.fees`] || 0;
+//         const pin_code = req.body[`slots.${day}.${index}.pin_code`] || null;
+//         const address = req.body[`slots.${day}.${index}.address`] || null;
+
+//         const start_time = req.body[`slots.${day}.${index}.start_time`] || null;
+//         const end_time = req.body[`slots.${day}.${index}.end_time`] || null;
+
+//         // Duration
+//         let duration = req.body[`slots.${day}.${index}.duration`];
+//         if (!duration || duration == 0) {
+//           if (start_time && end_time) {
+//             duration = moment(end_time, "HH:mm").diff(moment(start_time, "HH:mm"), "minutes");
+//           } else {
+//             duration = 0;
+//           }
+//         }
+// // let slotRecord = null;
+// // if (slot_id) {
+// //   slotRecord = await DoctorSlot.findOne({ where: { id: slot_id, doctorId: doctor_id } });
+// // }
+
+// // images
+
+// //        const getFile = (field) => {
+// //   if (!req.files) return null;
+// //   return req.files[field] ? req.files[field][0] : null;
+// // };
+
+// // const image_url_1_file = getFile(`slots.${day}.${index}.image_url_1`);
+// // const image_url_2_file = getFile(`slots.${day}.${index}.image_url_2`);
+
+// // const clinic_image_1 = image_url_1_file
+// //   ? image_url_1_file.filename
+// //   :  null;
+
+// // const clinic_image_2 = image_url_2_file
+// //   ? image_url_2_file.filename
+// //   :  null;
+
+
+//         let slotRecord;
+// const image_url_1_file = req.files?.find(
+//   (f) => f.fieldname == `slots.${day}.${index}.image_url_1`
+// );
+
+// const image_url_2_file = req.files?.find(
+//   (f) => f.fieldname == `slots.${day}.${index}.image_url_2`
+// );
+
+
+
+// let clinic_image_1 = image_url_1_file
+//   ? image_url_1_file.filename
+//   : null;
+
+// let clinic_image_2 = image_url_2_file
+//   ? image_url_2_file.filename
+//   : null;
+
+
+//         if (slot_id) {
+//           // UPDATE SLOT
+//           slotRecord = await DoctorSlot.findOne({ where: { id: slot_id, doctorId: doctor_id } });
+
+//           if (slotRecord) {
+//             const image_url_1_file = req.files?.find(
+//   (f) => f.fieldname === `slots.${day}.${index}.image_url_1`
+// );
+
+// const image_url_2_file = req.files?.find(
+//   (f) => f.fieldname === `slots.${day}.${index}.image_url_2`
+// );
+
+// const clinic_image_1 = image_url_1_file
+//   ? image_url_1_file.filename
+//   : slotRecord?.clinic_image_1;
+
+// const clinic_image_2 = image_url_2_file
+//   ? image_url_2_file.filename
+//   : slotRecord?.clinic_image_2;
+//             await slotRecord.update(
+//               {
+//                 day,
+//                 session_type: session,
+//                 clinic_name,
+//                 clinic_address,
+//                 fees,
+//                 emergency_fees,
+//                 pin_code,
+//                 start_time,
+//                 end_time,
+//                 duration,
+//                 clinic_image_1: clinic_image_1 || slotRecord.clinic_image_1,
+//                 clinic_image_2: clinic_image_2 || slotRecord.clinic_image_2,
+//                 address
+//               },
+//               { transaction: t }
+//             );
+//           }
+
+
+//         } else {
+//           // CREATE NEW SLOT
+//           slotRecord = await DoctorSlot.create(
+//             {
+//               doctorId: doctor_id,
+//               day,
+//               session_type: session,
+//               clinic_name,
+//               clinic_address,
+//               fees,
+//               emergency_fees,
+//               pin_code,
+//               start_time,
+//               end_time,
+//               duration,
+//               clinic_image_1,
+//               clinic_image_2,
+//             },
+//             { transaction: t }
+//           );
+//         }
+
+//         finalSlots.push(slotRecord);
+//         index++;
+//       }
+//     }
+
+//     await t.commit();
+
+//     return Helper.response(
+//       true,
+//       "Offline doctor slots saved successfully",
+//       finalSlots,
+//       res,
+//       200
+//     );
+
+//   } catch (error) {
+//     console.error("Doctor Slot Error:", error);
+//     await t.rollback();
+//     return Helper.response(false, error.message, [], res, 500);
+//   }
+// };
+
+exports.getAllcitydd = async (req, res) => {
+  try {
+    const city = await CityMaster.findAll({
+      attributes: [
+        [col("id"), "value"],
+        [col("name"), "label"],
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No City found", [], res, 404);
+    }
+    return Helper.response(
+      true,
+      "City fetched successfully",
+      City,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching City",
+      res,
+      500
+    );
   }
 };

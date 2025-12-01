@@ -2,7 +2,7 @@ const sequelize = require("../../connection/connection");
 const CryptoJS = require("crypto-js");
 const Helper=require('../../helper/helper.js')
 const jwt = require("jsonwebtoken");
-const admin =require('../../../model/admin.js')
+const admin =require('../../model/admin.js')
 require("dotenv").config();
 const { Op } = require("sequelize");
 

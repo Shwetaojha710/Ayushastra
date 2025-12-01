@@ -6,7 +6,7 @@ const { configDotenv } = require('dotenv').config()
 const cors = require('cors')
 const body = require('body-parser')
 const path = require('path')
-
+const user_admin = require('./app/model/user_admin')
 const port = process.env.SERVER_PORT || 9000
 app.use(express.json())
 app.use(cors({

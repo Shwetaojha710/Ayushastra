@@ -1,5 +1,5 @@
-const Category = require("../../../model/category");
-const Subcategory = require("../../../model/subcategory");
+const Category = require("../../model/category");
+const Subcategory = require("../../model/subcategory");
 const Helper = require("../../helper/helper.js");
 
 exports.addsubcategory = async (req, res) => {

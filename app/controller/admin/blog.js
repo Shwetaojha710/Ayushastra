@@ -1,10 +1,12 @@
-const blog = require("../../../model/blog.js");
-const Category = require("../../../model/category.js");
-const Doctor = require("../../../model/doctor.js");
-const Qualification = require("../../../model/qualification.js");
+const blog = require("../../model/blog.js");
+const Category = require("../../model/category.js");
+const Doctor = require("../../model/doctor.js");
+const Qualification = require("../../model/qualification.js");
 const Helper = require("../../helper/helper.js");
 const { col } = require("sequelize");
-
+const sequelize = require("../../connection/connection.js");
+const formidable = require("formidable");
+const fileType = require("file-type");
 exports.addBlog = async (req, res) => {
   const {
     blog_title,
@@ -214,6 +216,92 @@ exports.deleteBlog = async (req, res) => {
       "Error deleting Blog",
       res,
       500
+    );
+  }
+};
+
+exports.documentUpload = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const form = new formidable.IncomingForm();
+
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        await transaction.rollback();
+        return Helper.response(
+          Helper.encryptPassword(JSON.stringify("failed")),
+          "Error parsing form",
+          err,
+          res,
+          200
+        );
+      }
+
+      try {
+        console.log(fields, "0099");
+        console.log(files, "0099");
+
+        let result;
+
+        // Handle file uploads
+        const baseUploadDir = `upload`;
+        // for (const field in files) {
+        // console.log(field,"file name")
+        // return false
+        if (files["upload"][0]) {
+          result = await Helper.moveFile(files["upload"][0], baseUploadDir);
+
+          if (result.error) {
+            await transaction.rollback();
+            return Helper.response(
+              Helper.encryptPassword(JSON.stringify("failed")),
+              result.error,
+              null,
+              res,
+              200
+            );
+          }
+        }
+console.log(result,"file moved data")
+
+        let filePath = `${process.env.BASE_URL}${result.filePath}`;
+        await transaction.commit();
+    let obj=    {
+          "uploaded": 1,
+          "fileName":files["upload"][0].originalFilename,
+          "url": filePath
+        }
+        
+     
+        return res.status(200).json(
+             
+          {
+            status: "success",
+            message:  "Document Uploaded successfully",
+          uploaded: 1,
+          fileName: files["upload"][0].originalFilename,
+          url: filePath
+        });
+      } catch (error) {
+        await transaction.rollback();
+        console.error("Error processing request:", error);
+        return Helper.response(
+          Helper.encryptPassword(JSON.stringify("failed")),
+          error?.message || "An unexpected error occurred",
+          { error },
+          res,
+          200
+        );
+      }
+    });
+  } catch (error) {
+    console.error("Transaction error:", error);
+    return Helper.response(
+      Helper.encryptPassword(JSON.stringify("failed")),
+      "Server error occurred",
+      { error },
+      res,
+      200
     );
   }
 };

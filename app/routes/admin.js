@@ -60,13 +60,22 @@ const {
   deletespeclization,
   updateDoctor,
   getallDoctordd,
+  userDropDown,
+  addDoctorSlots,
+  getDoctorSlot,
+  updateDoctorSlots,
+  addOfflineDoctorSlots,
+  getAllcitydd
 } = require("../controller/admin/master.js");
 const upload = require("../middleware/upload.js");
 const { Admin } = require("../middleware/auth.js");
-const { addBlog, getAllBlog, updateBlog, deleteBlog } = require("../controller/admin/blog.js");
+const { addBlog, getAllBlog, updateBlog, deleteBlog, documentUpload } = require("../controller/admin/blog.js");
 const { addVideo, updateVideo, listVideos, deleteVideo } = require("../controller/admin/video.js");
-const { getDashboardData, dashboardOrderTable, getPopularProducts } = require("../controller/admin/dashboard.js");
+const { getDashboardData, dashboardOrderTable, getPopularProducts, getOrderById } = require("../controller/admin/dashboard.js");
 const { getOrderList } = require("../controller/admin/checkout.js");
+const { addReview, getUser, getRegisteredUser } = require("../controller/admin/account.js");
+const { upsertReferralSettings, getReferralSettings, addReferral, updateReferral, deleteReferral } = require("../controller/admin/referral.js");
+const { getPartnerList } = require("../controller/admin/partner.js");
 // const { login, logout, AIlogin,Applogin, verifyOtp, Applogout } = require('../controller/auth/login');
 // const {Admin, AppAdmin} = require('../middleware/auth');
 const router = express.Router();
@@ -128,8 +137,8 @@ router.get("/coupon-dd", Admin, getcouponDD);
 router.post("/update-coupon", Admin, updatecoupon);
 router.post("/delete-coupon", Admin, deletecoupon);
 
-router.post("/state-dd", Admin, getstatedd);
-router.post("/district-dd", Admin, getdistrictdd);
+router.post("/state-dd", getstatedd);
+router.post("/district-dd", getdistrictdd);
 const qualificationFields = Array.from({ length: 10 }, (_, i) => ({
   name: `qualifications[${i}].certificate`,
   maxCount: 1,
@@ -146,7 +155,7 @@ router.get("/list-doctor", Admin, getallDoctorList);
 router.post("/doctor-by-id", Admin, getallDoctorById);
 router.post("/create-specialization", Admin, addspeclization);
 router.get("/list-specialization", Admin, getAllspeclization);
-router.post("/specialization-dd", Admin, getAllspeclizationDD);
+router.post("/specialization-dd", getAllspeclizationDD);
 router.post("/update-specialization", Admin, updatespeclization);
 router.post("/delete-specialization", Admin, deletespeclization);
 
@@ -171,5 +180,37 @@ router.post("/delete-video-article", Admin, deleteVideo);
 router.get("/dashboard", Admin, getDashboardData);
 router.post("/dashboard-order-table", Admin, dashboardOrderTable);
 router.post("/dashboard-popular-products", Admin, getPopularProducts);
+router.post("/order-details", Admin, getOrderById);
+router.post("/user-dd", Admin, userDropDown);
+router.post("/file-upload-url",   documentUpload);
+router.post("/delete-video-article", Admin, deleteVideo);
+router.post("/add-doctor-slot", Admin, addDoctorSlots);
+
+const doctorSlots = Array.from({ length: 10 }, (_, i) => ({
+  name: `slots[${i}].image_url_2`,
+  maxCount: 1,
+}));
+
+
+router.post( "/add-offline-doctor-slot", Admin,
+  upload.any(),
+  addOfflineDoctorSlots
+);
+
+
+// router.post("/add-offline-doctor-slot", Admin,upload.any(), addOfflineDoctorSlots);
+router.post("/get-doctor-slot", Admin, getDoctorSlot);
+router.post("/update-doctor-slot", Admin, updateDoctorSlots);
+
+
+router.post("/create-referral", Admin, addReferral);
+router.get("/list-referral", Admin, getReferralSettings);
+// router.get("/salt-dd", Admin, getAllsaltDD);
+router.post("/update-referral", Admin, updateReferral);
+router.post("/delete-referral", Admin, deleteReferral);
+router.get("/guest-user", Admin, getUser);
+router.get("/registered-user", Admin, getRegisteredUser);
+router.get("/becomePartner-user", Admin, getPartnerList);
+router.post("/city-dd", getAllcitydd);
 
 module.exports = router;

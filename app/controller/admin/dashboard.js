@@ -1,12 +1,13 @@
 const { Op, fn, col, literal } = require("sequelize");
-const OrderItem = require("../../../model/OrderItem");
-const Order = require("../../../model/order");
-const User = require("../../../model/user");
+const Order = require("../../model/order");
+const User = require("../../model/user");
 const Helper = require("../../helper/helper");
-const Product = require("../../../model/product");
-const Category = require("../../../model/category");
+const Product = require("../../model/product");
+const Category = require("../../model/category");
 const moment = require("moment");
-const Address = require("../../../model/address");
+const Address = require("../../model/address");
+const coupons = require("../../model/coupon");
+const OrderItem = require("../../model/orderItem");
 
 // Helper to generate current month labels until today
 function generateMonthLabels() {
@@ -254,7 +255,21 @@ exports.dashboardOrderTable = async (req, res) => {
           Address.findOne({ where: { id: order.billing_address_id } }),
           OrderItem.count({ where: { order_id: order.id } }),
         ]);
-
+        const order1 =await OrderItem.findAll({
+          where:{
+             order_id: order.id 
+          },
+          raw:true
+        })
+        let product;
+         if(order1.length==1){
+          product=await Product.findOne({
+            where:{
+               id:order1[0]?.product_id
+            }
+          }) 
+         }
+        
         return {
           id: order.id,
           orderNum: order.order_no,
@@ -267,9 +282,11 @@ exports.dashboardOrderTable = async (req, res) => {
           date: moment(order.createdAt).format("YYYY-MM-DD hh:mm A"),
           address: address?.address || "N/A",
           product_count: orderCount,
+          items:orderCount == 1 ? product?.product_name: `${orderCount} items`
         };
       })
     );
+
 
     if (search && search.trim() !== "") {
       const lower = search.toLowerCase();
@@ -364,7 +381,7 @@ exports.getPopularProducts = async (req, res) => {
           attributes: [
             "id",
             "product_name",
-            "product_banner_image",
+            [col("meta_image"),"product_banner_image"],
             "offer_price",
             "mrp",
           ],
@@ -391,6 +408,91 @@ exports.getPopularProducts = async (req, res) => {
     return Helper.response(true, "Data Found Suscess", topProducts, res, 200);
   } catch (error) {
     console.error("Error fetching popular products:", error);
+    return Helper.response(false, error?.message, {}, res, 500);
+  }
+};
+
+
+
+exports.getOrderById = async (req, res) => {
+  try {
+    const { order_id } = req.body;
+
+    if (!order_id) {
+      return Helper.response(false, "Order ID is required", {}, res, 400);
+    }
+
+    // Fetch main order
+    const order = await Order.findOne({
+      where: { order_no: order_id },
+      raw: true,
+    });
+
+    if (!order) {
+      return Helper.response(false, "Order not found", {}, res, 404);
+    }
+
+    // Fetch order items
+    let orderItems = await OrderItem.findAll({
+      where: { order_id: order.id },
+      raw: true,
+    });
+
+    // Add product details to each item
+    orderItems = await Promise.all(
+      orderItems.map(async (item) => {
+        const product = await Product.findOne({
+          where: { id: item.product_id },
+          attributes: ["product_name", "meta_image"],
+          raw: true,
+        });
+
+        return {
+          ...item,
+          product_name: product ? product.product_name : null,
+          product_image: product ? product.meta_image : null,
+
+        };
+      })
+    );
+
+    // Fetch address and coupon in parallel
+    const [address,billing_Address, coupon] = await Promise.all([
+      Address.findOne({
+        where: {
+          id: order?.shipping_address_id,
+          user_type: order?.user_type,
+        },
+        raw: true,
+      }),
+      Address.findOne({
+        where: {
+          id: order?.billing_address_id,
+          user_type: order?.user_type,
+        },
+        raw: true,
+      }),
+      order?.coupon_id
+        ? coupons.findOne({
+            where: { id: order.coupon_id },
+            raw: true,
+          })
+        : null,
+    ]);
+
+    // Combine everything
+    const data = {
+      ...order,
+      items: orderItems,
+      address,
+      billing_Address:billing_Address,
+      coupon_name:coupon?.coupon_name,
+      date:Helper.dateFormat(order?.createdAt)
+    };
+
+    return Helper.response(true, "Order fetched successfully", data, res, 200);
+  } catch (error) {
+    console.error("Error fetching order:", error);
     return Helper.response(false, error?.message, {}, res, 500);
   }
 };

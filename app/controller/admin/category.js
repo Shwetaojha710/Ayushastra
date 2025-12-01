@@ -1,4 +1,4 @@
-const Category = require("../../../model/category");
+const Category = require("../../model/category");
 const Helper = require("../../helper/helper.js");
 const {col}=require('sequelize')
 // exports.addCategory = async (req, res) => {
@@ -204,7 +204,7 @@ exports.updateCategory = async (req, res) => {
       category.doc_type = file.mimetype;
     }
 
-    category.name = name.trim();
+    category.name =name ? name?.trim() : category.name;
     category.parent_id = parent_id || category.parent_id;
     category.status = status || category.status;
     category.order = order || category.order;
@@ -280,41 +280,96 @@ exports.deleteCategory = async (req, res) => {
   }
 };
 
+// exports.getcategoryDD = async (req, res) => {
+//   try {
+//     const categories = await Category.findAll({
+//       where: {
+//         status: true,
+//       },
+//       attributes: [
+//         [col("id"), "value"],
+//         [col("name"), "label"],
+//         "order",
+//         "image"
+//       ],
+//       order: [["order", "ASC"]],
+//       raw: true,
+//     });
+//     if (categories.length > 0) {
+//       return Helper.response(
+//         true,
+//         "Data Found Successfully",
+//         categories,
+//         res,
+//         200
+//       );
+//     } else {
+//       return Helper.response(true, "No Data Found", [], res, 200);
+//     }
+//   } catch (error) {
+//     console.log(error);
+
+//     return Helper.response(
+//       false,
+//       error.message,
+//       "Error Getting Category",
+//       res,
+//       500
+//     );
+//   }
+// };
+
 exports.getcategoryDD = async (req, res) => {
   try {
     const categories = await Category.findAll({
-      where: {
-        status: true,
-      },
-      attributes: [
-        [col("id"), "value"],
-        [col("name"), "label"],
-        "order",
-        "image"
-      ],
+      where: { status: true },
+      attributes: ["id", "parent_id", "name", "doc_type", "image", "status", "order"],
       order: [["order", "ASC"]],
       raw: true,
     });
-    if (categories.length > 0) {
-      return Helper.response(
-        true,
-        "Data Found Successfully",
-        categories,
-        res,
-        200
-      );
-    } else {
-      return Helper.response(true, "No Data Found", [], res, 200);
-    }
-  } catch (error) {
-    console.log(error);
 
-    return Helper.response(
-      false,
-      error.message,
-      "Error Getting Category",
-      res,
-      500
-    );
+    if (categories.length === 0) {
+      return Helper.response(false, "No data found", null, res, 200);
+    }
+
+    const map = {};
+    categories.forEach((item) => {
+      map[item.id] = { ...item, children: [] };
+    });
+
+    const tree = [];
+    categories.forEach((item) => {
+      if (item.parent_id && item.parent_id !== 0 && map[item.parent_id]) {
+        map[item.parent_id].children.push(map[item.id]);
+      } else {
+        tree.push(map[item.id]);
+      }
+    });
+
+    const formatToValueLabel = (nodes) => {
+      return nodes.map((node) => {
+        const formattedNode = {
+          label: node.name,
+          value: node.id
+        };
+
+        // Recursively map children if they exist
+        if (node.children && node.children.length > 0) {
+          formattedNode.children = formatToValueLabel(node.children);
+        }
+
+        return formattedNode;
+      });
+    };
+ 
+    
+    const formattedTree = formatToValueLabel(tree);
+
+    return Helper.response(true, "Data found successfully", formattedTree, res, 200);
+  } catch (error) {
+    console.error("Error creating category dropdown:", error);
+    return Helper.response(false, error?.message || "Something went wrong", {}, res, 500);
   }
 };
+
+

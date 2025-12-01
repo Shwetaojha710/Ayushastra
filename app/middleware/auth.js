@@ -1,6 +1,6 @@
-const admin=require("../../model/admin");
-const registered_user = require("../../model/registeredusers");
-const User = require("../../model/user");
+const admin=require("../model/admin");
+const registered_user = require("../model/registeredusers");
+const User = require("../model/user");
 const Helper = require("../helper/helper");
 
 const Admin = async (req, res, next) => {
@@ -112,7 +112,7 @@ const Admin = async (req, res, next) => {
         return Helper.response("expired", "Invalid token", {}, res, 200);
       }
  
-      const user = await registered_user.findOne({ where: { id: decoded.id } });
+      const user = await registered_user.findOne({ where: { id: decoded.id, isDeleted:false } });
  
       if (!user) {
         return Helper.response(false, "User not found", {}, res, 200);

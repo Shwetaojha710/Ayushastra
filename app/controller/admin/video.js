@@ -1,8 +1,9 @@
-const Category = require("../../../model/category");
-const Video = require("../../../model/video");
+const Category = require("../../model/category");
+const Video = require("../../model/video");
 const Helper = require("../../helper/helper");
 const { col } = require("sequelize");
-
+const fs = require("fs");
+const path = require("path");
 // exports.addVideo = async (req, res) => {
 //   try {
 //     const {
@@ -45,20 +46,26 @@ const { col } = require("sequelize");
 
 exports.addVideo = async (req, res) => {
   const {
-  title,
-      description,
-      url,
-      order,
-      image,
-      image_alt,
-      status=true,
-      img_type,
-      size,
-      category_id,
+    title,
+    description,
+    url,
+    order,
+    image,
+    image_alt,
+    status = true,
+    img_type,
+    size,
+    category_id,
   } = req.body;
   try {
-   if (!title || !url) {
-        return Helper.response(false, "Title and URL are required.", {}, res, 400);
+    if (!title || !url) {
+      return Helper.response(
+        false,
+        "Title and URL are required.",
+        {},
+        res,
+        400
+      );
     }
     // const existingBlog = await blog.findOne({
     //   where: { blog_title, category, doctor, extra_blog_details, publish },
@@ -75,22 +82,23 @@ exports.addVideo = async (req, res) => {
     const createdDocs = [];
 
     for (const file of req.files) {
-        const video = await Video.create({
-         description,
-      url,
-      order,
-      image:file.filename,
-      image_alt,
-      status,
-      img_type,
-      size,
-      category_id,
+      const video = await Video.create({
+        description,
+        url,
+        order,
+        title,
+        image: file.filename,
+        image_alt,
+        status,
+        img_type,
+        size,
+        category_id,
         doc_type: file.mimetype,
         createdBy: req.users?.id,
         updatedBy: req.users?.id,
         status: status || true,
       });
-      createdDocs.push(newDoc);
+      createdDocs.push(video);
     }
 
     return Helper.response(
@@ -107,37 +115,36 @@ exports.addVideo = async (req, res) => {
   }
 };
 
-
 exports.listVideos = async (req, res) => {
   try {
     const videos = await Video.findAll({
       order: [["order", "ASC"]],
       raw: true,
     });
-    
+
     const finalData = await Promise.all(
       videos.map(async (item) => {
         return {
-            ...item,
-        category: await Category.findOne({
+          ...item,
+          category: await Category.findOne({
             where: { id: item?.category_id },
             raw: true,
             attributes: [
-                [
-                    col("id"), "value"],
-                [col("name"), "label"],
+              [col("id"), "value"],
+              [col("name"), "label"],
             ],
-        })
-
+          }),
         };
-      }
-    )
-);
+      })
+    );
 
-   
-
-    
-    return Helper.response(true, "Data found Successfully", finalData, res, 200);
+    return Helper.response(
+      true,
+      "Data found Successfully",
+      finalData,
+      res,
+      200
+    );
   } catch (error) {
     console.error(error);
     return Helper.response(false, error?.message, {}, res, 500);
@@ -167,9 +174,8 @@ exports.updateVideo = async (req, res) => {
 
     let newImage = video.image;
 
-    
     if (req.files && Object.keys(req.files).length > 0) {
-      const file = req.files[0]; 
+      const file = req.files[0];
       newImage = file.filename || file.originalFilename;
 
       if (video.image) {
@@ -185,7 +191,7 @@ exports.updateVideo = async (req, res) => {
       description,
       url,
       order,
-    image:newImage,
+      image: newImage,
       image_alt,
       status,
       img_type,

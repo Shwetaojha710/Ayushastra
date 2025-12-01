@@ -1,6 +1,8 @@
-const Product = require("../../../model/product");
+const Product = require("../../model/product");
 const sequelize = require("../../connection/connection");
 const Helper = require("../../helper/helper");
+const family_member = require("../../model/family_member");
+const Doctor = require("../../model/doctor");
 
 // exports.addDoctor=async(req,res)=>{
 //   const t = await sequelize.transaction();
@@ -121,8 +123,6 @@ const Helper = require("../../helper/helper");
 //   }
 // }
 
-
-
 exports.addProduct = async (req, res) => {
   const t = await sequelize.transaction();
 
@@ -239,6 +239,179 @@ exports.addProduct = async (req, res) => {
   } catch (error) {
     await t.rollback();
     console.error("Error adding product:", error);
+    return Helper.response(false, error?.message, {}, res, 200);
+  }
+};
+
+
+
+exports.addFamilyMember = async (req, res) => {
+  const t = await sequelize.transaction();
+
+  try {
+    const {
+      name,
+      mobile,
+      dob,
+      age,
+      gender,
+    } = req.body;
+
+    if (!name || !mobile || !dob || !age || !gender) {
+        await t.rollback();
+      return Helper.response(false, "Required fields are missing", {}, res, 400);
+    }
+
+    const familMember = await family_member.create(
+      {
+        name,
+        mobile,
+        dob,  
+        age,
+        gender:gender?.value,
+      },
+      { transaction: t }
+    );
+
+
+    await t.commit();
+
+    return Helper.response(true, "Family Member created successfully", {}, res, 200);
+  } catch (error) {
+    await t.rollback();
+    console.error("Error adding Family Member:", error);
+    return Helper.response(false, error?.message, {}, res, 200);
+  }
+};
+
+exports.getFamilyMemberList = async (req, res) => { 
+  try {
+    const members = await family_member.findAll({
+      order: [['id', 'DESC']],
+      attributes: ['id', 'name', 'dob', 'age', 'gender', 'email', 'mobile'],  
+    });
+    if (!members) {
+      return Helper.response(false, "No Family Members found", {}, res, 200);
+    }
+    return Helper.response(true, "Family Member list fetched successfully",  members , res, 200);
+  } catch (error) {
+    console.error("Error fetching Family Member list:", error);
+    return Helper.response(false, error?.message, {}, res, 200);
+  }
+};
+
+exports.updateFamilyMember = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const {
+      id,
+      name,
+      mobile,
+      dob
+    } = req.body;
+
+    if (!id ) {
+      await t.rollback();
+      return Helper.response(false, "Id is Required", {}, res, 400);
+    } 
+    const member = await family_member.findByPk(id);
+    if (!member) {
+      await t.rollback();
+      return Helper.response(false, "Family Member not found", {}, res, 404);
+    } 
+    member.name = name;
+    member.mobile = mobile;
+    member.dob = dob; 
+    await member.save({ transaction: t });
+    await t.commit();
+
+    return Helper.response(true, "Family Member updated successfully", {}, res, 200);
+  } catch (error) {
+    await t.rollback();
+    console.error("Error updating Family Member:", error);
+    return Helper.response(false, error?.message, {}, res, 200);
+  }
+};
+
+exports.deleteFamilyMember = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.body;
+    if (!id) {
+      await t.rollback();
+      return Helper.response(false, "Id is Required", {}, res, 400);
+    }
+    const member = await family_member.findByPk(id);
+    if (!member) {
+      await t.rollback();
+      return Helper.response(false, "Family Member not found", {}, res, 404);
+    } 
+    await member.destroy({ transaction: t });
+    await t.commit();
+    return Helper.response(true, "Family Member deleted successfully", {}, res, 200);
+  } catch (error) {
+    await t.rollback();
+    console.error("Error deleting Family Member:", error);
+    return Helper.response(false, error?.message, {}, res, 200);
+  }
+};
+
+exports.ConsultDoctorList = async (req, res) => { 
+  try {
+      
+    const {specialization,qualification,diseases,city,symptom,consultation_type}=req.body;
+
+    let whereClause = {};
+
+    if (specialization) {
+      whereClause.specialization = specialization;
+    }
+    if (qualification) {
+      whereClause.qualification = qualification;
+    }
+    if (diseases) {
+      whereClause.diseases = diseases;
+    }
+    if (city) {
+      whereClause.city = city;
+    }
+    if (symptom) {
+      whereClause.symptom = symptom;
+    }
+    if (consultation_type) {
+      whereClause.consultation_type = consultation_type;
+    }
+       
+      const doctors = await Doctor.findAll({
+        where: whereClause,
+        order: [['id', 'DESC']],
+         attributes: [
+        "id",
+        "name",
+        "speciality",
+        "degree",
+        "experience",
+        "disease",
+        "cityId",
+        "textConsult",
+        "phoneConsult",
+        "online_consultation_fees",
+        "consultancyCharge",
+        "availability"
+      ],
+      });
+
+      if (!doctors || doctors.length == 0) {
+        return Helper.response(false, "No Doctors found", {}, res, 200);
+      } 
+      return Helper.response(true, "Doctor list fetched successfully",  doctors , res, 200);
+
+
+
+    // Logic to fetch and return the list of doctors
+    return Helper.response(true, "Doctor list fetched successfully",  [], res, 200);
+  } catch (error) {
+    console.error("Error fetching doctor list:", error);
     return Helper.response(false, error?.message, {}, res, 200);
   }
 };
