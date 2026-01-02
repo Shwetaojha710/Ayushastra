@@ -110,7 +110,7 @@ exports.submitImmunityQuiz = async (req, res) => {
     const maxScore = answerArray.length * 4;
     const percentage = ((totalScore / maxScore) * 100).toFixed(2);
 
-    let resultLabel = result || "Very Low Immunity";
+    let resultLabel 
     if (percentage >= 75) resultLabel = "Strong Immunity";
     else if (percentage >= 50) resultLabel = "Moderate Immunity";
     else if (percentage >= 25) resultLabel = "Low Immunity";
@@ -146,6 +146,48 @@ exports.submitImmunityQuiz = async (req, res) => {
     return Helper.response(false, error?.message, {}, res, 200);
   }
 };
+
+exports.getImmunityQuestionList = async (req, res) => {
+  try {
+    const { quiz_type } = req.body;
+
+    const whereCondition = {
+      status: true
+    };
+
+    if (quiz_type) {
+      whereCondition.quiz_type = quiz_type;
+    }
+
+    const questions = await ImmunityQuestion.findAll({
+      where: whereCondition,
+      attributes: [
+        ['id', 'QuestionId'],
+        ['hint', 'hint'],
+        ['question', 'Question'],
+        ['option_a', 'OptionA'],
+        ['option_b', 'OptionB'],
+        ['option_c', 'OptionC'],
+        ['option_d', 'OptionD']
+      ],
+      order: [['order_no', 'ASC']],
+      raw: true
+    });
+
+    return Helper.response(
+      true,
+      "Immunity questions fetched successfully",
+      questions,
+      res,
+      200
+    );
+
+  } catch (error) {
+    console.error("Error fetching immunity questions:", error);
+    return Helper.response(false, error.message, [], res, 500);
+  }
+};
+
 
 exports.getImmunityResults = async (req, res) => {
   try {
@@ -259,3 +301,5 @@ exports.getImminityAnswer = async (req, res) => {
     return Helper.response(false, error?.message, {}, res, 500);
   }
 };
+
+

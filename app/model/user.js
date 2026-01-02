@@ -45,7 +45,7 @@ const User = sequelize.define(
     },
     deviceId: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
     },
     status: {
       type: DataTypes.BOOLEAN,

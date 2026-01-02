@@ -38,8 +38,7 @@ const { duration } = require("moment/moment");
     {
       tableName: "city_master",
       schema: "public",
-      timestamps: false,
-      underscored:true
+      timestamps: false
     }
   );
 

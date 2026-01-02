@@ -9,6 +9,10 @@ const family_member = sequelize.define('family_member', {
       primaryKey: true,
       autoIncrement: true,
     },
+    user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     name: {
       type: DataTypes.STRING,
       allowNull: false,

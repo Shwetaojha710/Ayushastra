@@ -49,3 +49,32 @@ exports.getPartnerList = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
+
+exports.updateBecomePartner = async (req, res) => {
+  try {
+    const { id, status } = req.body;
+    if (!id) {
+      return Helper.response(false, "Id Is required", {}, res, 200);
+    }
+
+    const data = await Partner.findOne({
+      where: {
+        id,
+      },
+    });
+    if (!data) {
+      return Helper.response(false, "No data Found", {}, res, 200);
+    }
+    await Partner.update(
+      { status },
+      {
+        where: { id },
+      }
+    );
+
+    return Helper.response(true, "data Updated Successfully", {}, res, 200);
+  } catch (error) {
+    console.error("Error list of Partner:", error);
+    return Helper.response(false, error.message, {}, res, 500);
+  }
+};

@@ -357,6 +357,7 @@ Helper.getCurrentMonth = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 const bcrypt = require("bcrypt");
+const PrakritiRecommendation = require("../model/prakriti_recommendations");
 
 Helper.comparePassword = async (plainPassword, hashedPassword) => {
   try {
@@ -440,5 +441,318 @@ Helper.filterProducts = (data, searchKey)=> {
     );
   });
 }
+
+Helper.getCartSummaryInternal= async(req)=> {
+  try {
+    const mockRes = {
+      json: (data) => data,
+    };
+
+    // Call your actual cart logic
+    let result;
+
+    await exports.getAppCartList(
+      req,
+      {
+        json: (data) => (result = data),
+      }
+    );
+
+    return result;
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+
+Helper.calculatePrakriti=(vata, pitta, kapha)=> {
+  const scores = { Vata: vata, Pitta: pitta, Kapha: kapha };
+
+  // Sort doshas by score (highest first)
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+
+  const [d1, s1] = sorted[0]; // highest
+  const [d2, s2] = sorted[1]; // second highest
+  const [d3, s3] = sorted[2]; // lowest
+
+  const diff12 = s1 - s2; // top two difference
+  const diff23 = s2 - s3; // second and third
+  const diff13 = s1 - s3; // highest and lowest
+
+  // -------------------------------------------
+  // 1️⃣ SINGLE DOSHA PRAKRITI (Ek-Doshaja)
+  // Highest dosha is ≥ 3 points above the rest
+  // -------------------------------------------
+  if (diff12 >= 3 && diff13 >= 3) {
+    return d1 + " Prakriti";
+  }
+
+  // -------------------------------------------
+  // 2️⃣ DUAL DOSHA PRAKRITI (Dwi-Doshaja)
+  // Top two doshas differ by ≤ 2 points
+  // -------------------------------------------
+  if (diff12 <= 2 && diff23 >= 3) {
+    return `${d1}-${d2}`; // example: Vata-Pitta
+  }
+
+  // -------------------------------------------
+  // 3️⃣ TRI-DOSHA PRAKRITI
+  // All three doshas within ≤ 2 points
+  // -------------------------------------------
+  if (diff13 <= 2) {
+    return "Tridosha";
+  }
+
+  // Default fallback (should not occur normally)
+  return d1 + " Prakriti";
+}
+
+Helper.parseIds = (ids) => {
+  if (!ids) return [];
+
+  return ids
+    .toString()
+    .split(",")
+    .map((i) => parseInt(i.trim()))
+    .filter((i) => !isNaN(i));
+};
+
+
+Helper.getPrakritiRecommendations = async (prakriti) => {
+  try {
+    const  prakriti_type  = prakriti;
+
+    if (!prakriti_type) {
+      return Helper.response(
+        false,
+        "prakriti_type is required",
+        [],
+        res,
+        400
+      );
+    }
+
+    const data = await PrakritiRecommendation.findAll({
+      where: {
+        prakriti_type: prakriti_type.toUpperCase(),
+      },
+      order: [["id", "ASC"]],
+      raw: true,
+    });
+
+    if (!data.length) {
+      return false
+    }
+
+    // Group by section
+    const groupedData = data.reduce((acc, item) => {
+      if (!acc[item.section]) acc[item.section] = [];
+      acc[item.section].push({
+        title: item.title,
+        description: item.description,
+      });
+      return acc;
+    }, {});
+   
+   return groupedData
+    // return Helper.response(
+    //   true,
+    //   "Prakriti recommendations fetched successfully",
+    //   groupedData,
+    //   res,
+    //   200
+    // );
+  } catch (error) {
+    console.error("Prakriti Recommendation API Error:", error);
+    // return error?.message
+    return Helper.response(false, error.message, [], res, 500);
+  }
+};
+
+Helper.generateConsultationBookingId = (type = "") => {
+  // -------------------------
+  // DATE PART (YYYYMMDD)
+  // -------------------------
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const datePart = `${yyyy}${mm}${dd}`;
+
+  // -------------------------
+  // TYPE → PREFIX
+  // -------------------------
+  let prefix = "CN";
+
+  if (type) {
+    const parts = type.split("_");
+    const lastPart = parts[parts.length - 1]; // appointment
+
+    prefix = lastPart
+      .substring(0, 2)
+      .toUpperCase()
+      .padEnd(2, "X");
+  }
+
+  // -------------------------
+  // RANDOM PART
+  // -------------------------
+  const randomPart = crypto
+    .randomBytes(4)
+    .toString("base64")
+    .replace(/[^A-Z0-9]/gi, "")
+    .substring(0, 6)
+    .toUpperCase();
+
+  return `${prefix}-${datePart}-${randomPart}`;
+};
+
+
+Helper.sendPushNotification = async (deviceToken, title, message, data = {}) => {
+  const stringifiedData = {};
+  for (const key in data) {
+    stringifiedData[key] = typeof data[key] === 'object'
+      ? JSON.stringify(data[key])
+      : String(data[key]);
+  }
+ 
+  const payload = {
+    token: deviceToken,
+    notification: {
+      title,
+      body: message
+    },
+    data: stringifiedData
+  };
+  try {
+    await admin.messaging().send(payload);
+    console.log("Push notification sent successfully");
+  } catch (error) {
+    console.error("Error sending push notification:", error);
+  }
+};
+
+
+Helper.safeParse = (value) => {
+  if (!value) return [];
+
+  // already array
+  if (Array.isArray(value)) return value;
+
+  // must be string
+  if (typeof value !== "string") return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    // fallback: treat as single text value
+    return [value];
+  }
+};
+
+const normalizePrakriti = (title) => {
+  if (!title) return null;
+  const t = title.toUpperCase().trim();
+  if (t === "VATTA") return "VATA"; // 🔥 important mapping
+  return t;
+};
+
+Helper.mergePrakritiData = (input) => {
+  const merged = {};
+
+  input.forEach((item) => {
+    const prakriti = normalizePrakriti(item.title);
+    if (!prakriti) return;
+
+    // Initialize once
+    if (!merged[prakriti]) {
+      merged[prakriti] = {
+        title: prakriti,
+        AAHAR: [],
+        VIHAR: [],
+        CHIKITSA: [],
+      };
+    }
+
+    // Merge sections
+    ["AAHAR", "VIHAR", "CHIKITSA"].forEach((section) => {
+      if (Array.isArray(item[section]) && item[section].length) {
+        merged[prakriti][section].push(...item[section]);
+      }
+    });
+  });
+
+  return Object.values(merged);
+};
+
+
+
+const PDFDocument = require("pdfkit");
+// const fs = require("fs");
+// const path = require("path");
+
+Helper.generatePrescriptionPDF = async (data) => {
+  try {
+    const prescription = data[0];
+    if (!prescription) return null;
+
+    const {
+      booking_id,
+      doctor_id,
+      user_id,
+      notes,
+      diagnosis,
+      prakriti_assessment,
+      created_at,
+    } = prescription;
+
+    const dirPath = path.join(__dirname, "../../upload/prescriptions");
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+
+    const fileName = `prescription_${booking_id}.pdf`;
+    const filePath = path.join(dirPath, fileName);
+
+    await new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const stream = fs.createWriteStream(filePath);
+
+      doc.pipe(stream);
+
+      doc.fontSize(20).text("Prescription", { align: "center" }).moveDown();
+
+      doc.fontSize(12);
+      doc.text(`Booking ID: ${booking_id}`);
+      doc.text(`Doctor ID: ${doctor_id}`);
+      doc.text(`Patient ID: ${user_id}`);
+      doc.text(`Date: ${new Date(created_at).toDateString()}`);
+      doc.moveDown();
+
+      doc.text("Diagnosis:", { underline: true });
+      doc.text(diagnosis || "N/A").moveDown();
+
+      doc.text("Notes:", { underline: true });
+      doc.text(notes || "N/A").moveDown();
+
+      doc.text(`Prakriti Assessment: ${prakriti_assessment ? "Yes" : "No"}`);
+
+      doc.end();
+
+      stream.on("finish", resolve);
+      stream.on("error", reject);
+    });
+
+    const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+    return `${baseUrl}upload/prescriptions/${fileName}`;
+
+  } catch (error) {
+    console.error("Generate Prescription PDF Error:", error);
+    return null;
+  }
+};
+
+
 
 module.exports = Helper;

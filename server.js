@@ -6,8 +6,11 @@ const { configDotenv } = require('dotenv').config()
 const cors = require('cors')
 const body = require('body-parser')
 const path = require('path')
-const user_admin = require('./app/model/user_admin')
+const prescriptions = require('./app/model/prescription')
+const prescription_medicines = require('./app/model/prescription_medicines')
+const treatment_master = require('./app/model/treatment_master')
 const port = process.env.SERVER_PORT || 9000
+
 app.use(express.json())
 app.use(cors({
   origin: (origin, callback) => {
@@ -16,7 +19,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(body.json({ limit: '10mb' }))
+app.use(body.json({ limit: '50mb' }))
 app.use(body.urlencoded({ extended: true }))
 
 app.use(express.static("upload"));

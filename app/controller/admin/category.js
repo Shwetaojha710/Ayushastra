@@ -1,6 +1,7 @@
 const Category = require("../../model/category");
 const Helper = require("../../helper/helper.js");
-const {col}=require('sequelize')
+const { col } = require("sequelize");
+const Doctor = require("../../model/doctor.js");
 // exports.addCategory = async (req, res) => {
 //   try {
 //     const { name, status } = req.body;
@@ -121,15 +122,12 @@ exports.getAllCategories = async (req, res) => {
       raw: true,
     });
 
-
     if (categories.length > 0) {
-    
       const map = {};
       categories.forEach((item) => {
         map[item.id] = { ...item, subcategory: [] };
       });
 
- 
       let tree = [];
       categories.forEach((item) => {
         if (item.parent_id !== 0) {
@@ -168,13 +166,11 @@ exports.getCategoryById = async (req, res) => {
 
     res.status(200).json({ success: true, data: category });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching category",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching category",
+      error: error.message,
+    });
   }
 };
 
@@ -204,7 +200,7 @@ exports.updateCategory = async (req, res) => {
       category.doc_type = file.mimetype;
     }
 
-    category.name =name ? name?.trim() : category.name;
+    category.name = name ? name?.trim() : category.name;
     category.parent_id = parent_id || category.parent_id;
     category.status = status || category.status;
     category.order = order || category.order;
@@ -323,7 +319,15 @@ exports.getcategoryDD = async (req, res) => {
   try {
     const categories = await Category.findAll({
       where: { status: true },
-      attributes: ["id", "parent_id", "name", "doc_type", "image", "status", "order"],
+      attributes: [
+        "id",
+        "parent_id",
+        "name",
+        "doc_type",
+        "image",
+        "status",
+        "order",
+      ],
       order: [["order", "ASC"]],
       raw: true,
     });
@@ -350,7 +354,7 @@ exports.getcategoryDD = async (req, res) => {
       return nodes.map((node) => {
         const formattedNode = {
           label: node.name,
-          value: node.id
+          value: node.id,
         };
 
         // Recursively map children if they exist
@@ -361,14 +365,69 @@ exports.getcategoryDD = async (req, res) => {
         return formattedNode;
       });
     };
- 
-    
+
     const formattedTree = formatToValueLabel(tree);
 
-    return Helper.response(true, "Data found successfully", formattedTree, res, 200);
+    return Helper.response(
+      true,
+      "Data found successfully",
+      formattedTree,
+      res,
+      200
+    );
   } catch (error) {
     console.error("Error creating category dropdown:", error);
-    return Helper.response(false, error?.message || "Something went wrong", {}, res, 500);
+    return Helper.response(
+      false,
+      error?.message || "Something went wrong",
+      {},
+      res,
+      500
+    );
+  }
+};
+
+exports.UploadDoctordoc = async (req, res) => {
+  try {
+    if (!req.files) {
+      return Helper.response(false, "No files uploaded", {}, res, 400);
+    }
+
+    const files = req.files;
+    console.log(req.files,"request filesss");
+    console.log(req.body,"request bodyy");
+
+    // Use request host (best practice)
+    const baseUrl =process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+
+    const doctorData = {
+      profileImage: files?.profileImage
+        ? `${baseUrl}/${files.profileImage[0].path.replace(/\\/g, "/")}`
+        : null,
+
+      cert_image: files?.cert_image
+        ? `${baseUrl}/${files.cert_image[0].path.replace(/\\/g, "/")}`
+        : null,
+
+      addharFrontImage: files?.addharFrontImage
+        ? `${baseUrl}/${files.addharFrontImage[0].path.replace(/\\/g, "/")}`
+        : null,
+
+      addharBackImage: files?.addharBackImage
+        ? `${baseUrl}/${files.addharBackImage[0].path.replace(/\\/g, "/")}`
+        : null,
+    };
+
+    return Helper.response(
+      true,
+      "Document uploaded successfully",
+      doctorData,
+      res,
+      200
+    );
+  } catch (error) {
+    console.error(error);
+    return Helper.response(false, error.message, {}, res, 500);
   }
 };
 

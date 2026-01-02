@@ -4,9 +4,10 @@ const sequelize = require("../connection/connection");
 const DoctorSlot = sequelize.define('DoctorSlot', {
     id: { type: DataTypes.INTEGER, primaryKey: true,autoIncrement:true },
     doctorId: { type: DataTypes.INTEGER, allowNull: false },
+    clinic_id: { type: DataTypes.INTEGER, allowNull: true },
     day: { type: DataTypes.STRING, allowNull: false },
     session_type: { 
-      type: DataTypes.ENUM('online', 'offline','online_audio'), 
+      type: DataTypes.ENUM('online', 'offline','online_audio','timing'), 
       allowNull: false, 
       defaultValue: 'online' 
     },

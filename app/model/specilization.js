@@ -11,11 +11,15 @@ const speclization = sequelize.define("speclization", {
         type: DataTypes.STRING,
         allowNull: false,
     },
-         status: {
-         type: DataTypes.BOOLEAN,
+    details: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    status: {
+        type: DataTypes.BOOLEAN,
         defaultValue: true
     },
-     createdBy: {
+    createdBy: {
         type: DataTypes.INTEGER,
         allowNull: true
     },

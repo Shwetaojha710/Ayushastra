@@ -24,6 +24,7 @@ const path = require("path");
 const sequelize = require("../../connection/connection");
 const pin_code_master = require("../../model/pin_code_master");
 const Cart = require("../../model/cart");
+const speclization = require("../../model/specilization");
 
 exports.getPublicBanner = async (req, res) => {
   try {
@@ -287,12 +288,42 @@ exports.getPublicDiseases = async (req, res) => {
 
 exports.getPublicDoctor = async (req, res) => {
   try {
-    const doctorData = await Doctor.findAll({
-      where: {
-        status: true,
-      },
-      raw: true,
-    });
+       const qualification=await Qualification.findAll({
+          raw:true,
+          order:[["id","desc"]],
+          attributes:["doctorId"]
+         })
+         let DoctorId=qualification.map((item)=>item.doctorId)
+        const doctorData = await Doctor.findAll({
+          raw: true,
+          order: [["id", "desc"]],
+          where:{
+            id:{
+              [Op.in]:DoctorId
+            },
+            KYCstatus:"approved",
+          }
+        });
+    // const doctorData = await Doctor.findAll({
+    //   where: {
+    //     status: true,
+    //   },
+    //   raw: true,
+    // });
+
+    // const finalData=await Promise.all(
+    //    doctorData.map(async(item)=>{
+    //     const Specilizationdata=await speclization.findAll({
+    //       where:{
+    //         id:item?.speciality   
+    //       }
+    //     })
+    //       return  {
+    //          ...item,
+    //          speclization:Specilizationdata
+    //       }
+    //    })
+    // )
 
     if (doctorData.length > 0) {
       return Helper.response(
@@ -738,9 +769,10 @@ exports.getProductById = async (req, res) => {
         where: {
           id: { [Op.ne]: finalData[0].id }, // exclude current product
           [Op.or]: relatedOR,
-        },
-        status: true,
+            status: true,
         isPublish: true,
+        },
+      
         limit: 10,
         order: [["id", "DESC"]],
         raw: true,
@@ -935,7 +967,7 @@ exports.getStateDistrict = async (req, res) => {
       where: {
         pin_code: pin_code,
       },
-      attributes: ["id", "district_name", "state_name"],
+      attributes: ["id", "district_name", "state_name","district_id","state_id"],
       raw: true,
     });
 
@@ -955,3 +987,23 @@ exports.getStateDistrict = async (req, res) => {
     );
   }
 };
+
+
+exports.doctorStepDetails=async(req,res)=>{
+  try {
+
+    const {step}=req.body
+    
+
+    
+  } catch (error) {
+    console.error("Error adding District:", error);
+    return Helper.response(
+      false,
+      error?.errors?.[0]?.message || "Internal Server Error",
+      {},
+      res,
+      500
+    );
+  }
+}

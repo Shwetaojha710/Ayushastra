@@ -301,6 +301,195 @@ exports.addCart = async (req, res) => {
 // ==========================
 // Final getCartList API
 // ==========================
+// exports.getCartList = async (req, res) => {
+//   try {
+//     const deviceId = req.headers.deviceid;
+//     const { ayu_cash_apply = true } = req.body;
+
+//     if (!deviceId) {
+//       return Helper.response(false, "Device Id is required", [], res, 400);
+//     }
+
+//     const token = (req.headers.authorization || "").split(" ")[1];
+//     const registerUser =
+//       token && token !== "null"
+//         ? await registered_user.findOne({ where: { token } })
+//         : null;
+
+//     // =====================================
+//     //  Merge guest → user cart on login
+//     // =====================================
+//     if (registerUser) {
+//       await Helper.mergeGuestCartToUser(deviceId, registerUser.id);
+//     }
+
+//     // Build WHERE condition
+//     let whereCondition = {};
+
+//     if (registerUser) {
+//       whereCondition.registeruserId = registerUser.id;
+//     } else {
+//       whereCondition.deviceId = deviceId;
+//     }
+
+//     // Fetch cart rows
+//     const carts = await Cart.findAll({
+//       where: whereCondition,
+//       order: [["id", "DESC"]],
+//       raw: true,
+//     });
+
+//     if (!carts.length) {
+//       return Helper.response(false, "No carts found", [], res, 200);
+//     }
+
+//     // =========================================================
+//     //  MAP CART DATA + FETCH PRODUCT
+//     // =========================================================
+//     let finalData = await Promise.all(
+//       carts.map(async (item) => {
+//         const productData = await Product.findAll({
+//           where: { id: item.productId, status: true, isPublish: true },
+//           raw: true,
+//         });
+
+//         if (!productData.length) return null;
+
+//         return {
+//           ...item,
+//           quantity: parseFloat(item.quantity),
+//           total: parseFloat(item.total),
+//           price: parseFloat(item.price),
+//           productData,
+//         };
+//       })
+//     );
+
+//     finalData = finalData.filter((item) => item != null);
+
+//     // =====================================
+//     // Subtotal
+//     // =====================================
+//     let subtotalAmount = finalData.reduce((acc, item) => acc + item.total, 0);
+//     let totalAmount = subtotalAmount;
+
+//     let couponData;
+
+//     // ===========================================
+//     // Apply Coupon (your logic maintained)
+//     // ===========================================
+//     if (req.body.coupon_id) {
+//       couponData = await coupons.findOne({
+//         where: { id: req.body.coupon_id },
+//       });
+
+//       if (couponData) {
+//         totalAmount = subtotalAmount - couponData.max_discount;
+
+//         if (totalAmount < 0) {
+//           couponData.max_discount = "Not Applicable";
+//           totalAmount = subtotalAmount;
+//         }
+//       }
+//     }
+
+//     // =====================================
+//     // AyuCash Calculation
+//     // =====================================
+//     const ayuCash = finalData.reduce((acc, item) => {
+//       const product = item.productData.find((p) => p.id == item.productId);
+//       return acc + (parseInt(product?.ayu_cash) || 0);
+//     }, 0);
+
+//     // =====================================
+//     //  Ayushastra Brand check
+//     // =====================================
+//     let ayushastraBrandValue = 0;
+
+//     for (const item of finalData) {
+//       const product = item.productData.find(
+//         (p) => p.id == item.productId && p.status === true
+//       );
+
+//       const brand = await Brand.findOne({
+//         where: { id: product?.brand_id },
+//       });
+
+//       if (brand?.name?.toLowerCase() === "ayushsatra") {
+//         ayushastraBrandValue += parseFloat(item.total) || 0;
+//       }
+//     }
+
+//     let maxRedeemableAyuCash = 0;
+//     let ayuCashMessage = "";
+
+//     if (registerUser) {
+//       if (subtotalAmount >= 500 && ayushastraBrandValue >= 200) {
+//         maxRedeemableAyuCash = (subtotalAmount * 0.2).toFixed(2);
+//         console.log(totalAmount);
+//         console.log(maxRedeemableAyuCash);
+//         console.log(registerUser.toJSON());
+//         if (Number(registerUser?.ayucash_balance) < maxRedeemableAyuCash) {
+//           totalAmount = ayu_cash_apply
+//             ? totalAmount - Number(registerUser?.ayucash_balance)
+//             : totalAmount;
+
+//           ayuCashMessage = `You can redeem up to ₹${totalAmount} AyuCash.`;
+//         } else {
+//           totalAmount = ayu_cash_apply
+//             ? totalAmount - maxRedeemableAyuCash
+//             : totalAmount;
+//           ayuCashMessage = `You can redeem up to ₹${maxRedeemableAyuCash} AyuCash.`;
+//         }
+//       } else {
+//         if (subtotalAmount < 500)
+//           ayuCashMessage =
+//             "Cart value must be at least ₹500 to redeem AyuCash.";
+//         if (ayushastraBrandValue < 200)
+//           ayuCashMessage =
+//             "You must have at least ₹200 of Ayushastra products to redeem AyuCash.";
+//       }
+//     }
+
+//     let shippingCharge = totalAmount > 500 ? 0 : 79;
+
+//     const responseData = {
+//       cart_items: finalData,
+//       order_summary: {
+//         sub_total: parseInt(subtotalAmount.toFixed(2)),
+//         ayu_cash: ayuCash,
+//         shipping_charge: shippingCharge,
+//         coupon_discount: couponData?.max_discount ?? 0,
+//         total_amount: totalAmount + shippingCharge,
+//         coupon_id: req.body.coupon_id ?? null,
+//         maxRedeemableAyuCash:
+//           registerUser?.ayucash_balance < Number(maxRedeemableAyuCash)
+//             ? registerUser?.ayucash_balance
+//             : maxRedeemableAyuCash,
+//         ayuCashMessage,
+//         ayu_cash_apply: registerUser ? ayu_cash_apply : null,
+//       },
+//     };
+
+//     return Helper.response(
+//       true,
+//       "Cart list fetched successfully",
+//       responseData,
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     console.error("CartList Error:", error);
+//     return Helper.response(
+//       false,
+//       "Error fetching cart list",
+//       { message: error.message },
+//       res,
+//       500
+//     );
+//   }
+// };
+
 exports.getCartList = async (req, res) => {
   try {
     const deviceId = req.headers.deviceid;
@@ -310,29 +499,29 @@ exports.getCartList = async (req, res) => {
       return Helper.response(false, "Device Id is required", [], res, 400);
     }
 
+    // ---------------------------------------------------
+    // CHECK LOGGED-IN USER
+    // ---------------------------------------------------
     const token = (req.headers.authorization || "").split(" ")[1];
     const registerUser =
       token && token !== "null"
         ? await registered_user.findOne({ where: { token } })
         : null;
 
-    // =====================================
-    //  Merge guest → user cart on login
-    // =====================================
+    // ---------------------------------------------------
+    // MERGE GUEST CART AFTER LOGIN
+    // ---------------------------------------------------
     if (registerUser) {
       await Helper.mergeGuestCartToUser(deviceId, registerUser.id);
     }
 
-    // Build WHERE condition
-    let whereCondition = {};
+    // ---------------------------------------------------
+    // CART WHERE CONDITION
+    // ---------------------------------------------------
+    let whereCondition = registerUser
+      ? { registeruserId: registerUser.id }
+      : { deviceId };
 
-    if (registerUser) {
-      whereCondition.registeruserId = registerUser.id;
-    } else {
-      whereCondition.deviceId = deviceId;
-    }
-
-    // Fetch cart rows
     const carts = await Cart.findAll({
       where: whereCondition,
       order: [["id", "DESC"]],
@@ -343,11 +532,12 @@ exports.getCartList = async (req, res) => {
       return Helper.response(false, "No carts found", [], res, 200);
     }
 
-    // =========================================================
-    //  MAP CART DATA + FETCH PRODUCT
-    // =========================================================
+    // ---------------------------------------------------
+    // CART MERGE WITH PRODUCT DATA (ARRAY)
+    // ---------------------------------------------------
     let finalData = await Promise.all(
       carts.map(async (item) => {
+        // productData MUST be an ARRAY
         const productData = await Product.findAll({
           where: { id: item.productId, status: true, isPublish: true },
           raw: true,
@@ -355,29 +545,40 @@ exports.getCartList = async (req, res) => {
 
         if (!productData.length) return null;
 
+        const product = productData[0]; // take first item
+
+        let cartQty = Number(item.quantity);
+        let productQty = Number(product.maximum_qty || 0);
+
+        // LIMIT cart qty to product stock
+        if (cartQty > productQty) {
+          cartQty = productQty;
+        }
+
         return {
           ...item,
-          quantity: parseFloat(item.quantity),
-          total: parseFloat(item.total),
-          price: parseFloat(item.price),
-          productData,
+          quantity: cartQty,
+          max_quantity: productQty,
+          price: Number(item.price),
+          total: cartQty * Number(item.price),
+          productData, // ARRAY as you require
         };
       })
     );
 
-    finalData = finalData.filter((item) => item != null);
+    finalData = finalData.filter((item) => item !== null);
 
-    // =====================================
-    // Subtotal
-    // =====================================
+    // ---------------------------------------------------
+    // SUBTOTAL
+    // ---------------------------------------------------
     let subtotalAmount = finalData.reduce((acc, item) => acc + item.total, 0);
     let totalAmount = subtotalAmount;
 
     let couponData;
 
-    // ===========================================
-    // Apply Coupon (your logic maintained)
-    // ===========================================
+    // ---------------------------------------------------
+    // APPLY COUPON
+    // ---------------------------------------------------
     if (req.body.coupon_id) {
       couponData = await coupons.findOne({
         where: { id: req.body.coupon_id },
@@ -393,70 +594,79 @@ exports.getCartList = async (req, res) => {
       }
     }
 
-    // =====================================
-    // AyuCash Calculation
-    // =====================================
+    // ---------------------------------------------------
+    // AYU CASH CALCULATION (productData is ARRAY)
+    // ---------------------------------------------------
     const ayuCash = finalData.reduce((acc, item) => {
-      const product = item.productData.find((p) => p.id == item.productId);
+      const product = item.productData[0];
       return acc + (parseInt(product?.ayu_cash) || 0);
     }, 0);
 
-    // =====================================
-    //  Ayushastra Brand check
-    // =====================================
+    // ---------------------------------------------------
+    // AYUSHASTRA BRAND CALCULATION (productData is ARRAY)
+    // ---------------------------------------------------
     let ayushastraBrandValue = 0;
 
     for (const item of finalData) {
-      const product = item.productData.find(
-        (p) => p.id == item.productId && p.status === true
-      );
+      const product = item.productData[0];
 
       const brand = await Brand.findOne({
         where: { id: product?.brand_id },
       });
 
       if (brand?.name?.toLowerCase() === "ayushsatra") {
-        ayushastraBrandValue += parseFloat(item.total) || 0;
+        ayushastraBrandValue += Number(item.total);
       }
     }
 
+    // ---------------------------------------------------
+    // AYU CASH REDEEM RULES
+    // ---------------------------------------------------
     let maxRedeemableAyuCash = 0;
     let ayuCashMessage = "";
 
     if (registerUser) {
       if (subtotalAmount >= 500 && ayushastraBrandValue >= 200) {
         maxRedeemableAyuCash = (subtotalAmount * 0.2).toFixed(2);
-        console.log(totalAmount);
-        console.log(maxRedeemableAyuCash);
-        console.log(registerUser.toJSON());
-        if (Number(registerUser?.ayucash_balance) < maxRedeemableAyuCash) {
+
+        if (Number(registerUser.ayucash_balance) < maxRedeemableAyuCash) {
           totalAmount = ayu_cash_apply
-            ? totalAmount - Number(registerUser?.ayucash_balance)
+            ? totalAmount - Number(registerUser.ayucash_balance)
             : totalAmount;
 
-          ayuCashMessage = `You can redeem up to ₹${totalAmount} AyuCash.`;
+          ayuCashMessage = `You can redeem up to ₹${Number(
+            registerUser.ayucash_balance
+          )}.`;
         } else {
           totalAmount = ayu_cash_apply
             ? totalAmount - maxRedeemableAyuCash
             : totalAmount;
-          ayuCashMessage = `You can redeem up to ₹${maxRedeemableAyuCash} AyuCash.`;
+
+          ayuCashMessage = `You can redeem up to ₹${maxRedeemableAyuCash}.`;
         }
       } else {
         if (subtotalAmount < 500)
           ayuCashMessage =
             "Cart value must be at least ₹500 to redeem AyuCash.";
+
         if (ayushastraBrandValue < 200)
           ayuCashMessage =
             "You must have at least ₹200 of Ayushastra products to redeem AyuCash.";
       }
     }
 
+    // ---------------------------------------------------
+    // SHIPPING
+    // ---------------------------------------------------
     let shippingCharge = totalAmount > 500 ? 0 : 79;
 
+    // ---------------------------------------------------
+    // FINAL RESPONSE (unchanged)
+    // ---------------------------------------------------
     const responseData = {
       cart_items: finalData,
       order_summary: {
-        sub_total: parseInt(subtotalAmount.toFixed(2)),
+        sub_total: Number(subtotalAmount.toFixed(2)),
         ayu_cash: ayuCash,
         shipping_charge: shippingCharge,
         coupon_discount: couponData?.max_discount ?? 0,
@@ -489,6 +699,7 @@ exports.getCartList = async (req, res) => {
     );
   }
 };
+
 
 // exports.getCartList = async (req, res) => {
 //   try {
