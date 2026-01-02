@@ -1581,7 +1581,7 @@ exports.checkOut = async (req, res) => {
         400
       );
     }
-    console.log(req.body, "body Data");
+    // console.log(req.body, "body Data");
 
     const authHeader = req.headers["authorization"] || req.headers["Authorization"];
     const token = authHeader?.split(" ")[1];

@@ -2209,7 +2209,7 @@ exports.addDoctorProfessional = async (req, res) => {
     if (!doctorId) {
       return Helper.response(false, "Doctor id is required", {}, res, 400);
     }
-    const files = req.file;
+    const files = req.files;
     const doctor = await Doctor.findByPk(doctorId, { transaction: t });
     if (!doctor) {
       return Helper.response(false, "Doctor not found", {}, res, 404);
