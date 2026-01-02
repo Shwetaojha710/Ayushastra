@@ -753,6 +753,64 @@ Helper.generatePrescriptionPDF = async (data) => {
   }
 };
 
+Helper.formatAndGroupAddresses = (addresses = []) => {
+  if (!addresses.length) return [];
+
+  const formatAddress = (item) => ({
+    id: item.id,
+    full_name: item.full_name,
+    mobile: item.mobile,
+    address: item.address,
+    address_line2: item.address_line2,
+    city: item.city,
+    state: item.state,
+    postal_code: item.postal_code,
+    country: item.country,
+    is_default: item.is_default,
+    contact: {
+      name: item.full_name,
+      phone: item.mobile,
+    },
+  });
+
+  const grouped = {};
+
+  for (const addr of addresses) {
+    const key = addr.address_type || "HOME";
+
+    if (!grouped[key]) {
+      grouped[key] = {
+        address_type: key,
+        billing: null,
+        shipping: null,
+        isBillingSameAsShipping: false,
+      };
+    }
+
+    if (addr.type === "billing") {
+      grouped[key].billing = formatAddress(addr);
+      grouped[key].isBillingSameAsShipping =
+        addr.is_billing_same_as_shipping === true;
+    }
+
+    if (addr.type === "shipping") {
+      grouped[key].shipping = formatAddress(addr);
+    }
+  }
+
+  // Billing = Shipping
+  Object.values(grouped).forEach(group => {
+    if (
+      group.isBillingSameAsShipping &&
+      group.billing &&
+      !group.shipping
+    ) {
+      group.shipping = { ...group.billing };
+    }
+  });
+
+  return Object.values(grouped);
+};
 
 
 module.exports = Helper;

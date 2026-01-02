@@ -2105,8 +2105,7 @@ exports.addDoctorPersonal = async (req, res) => {
     // console.log(req.body,"body data111");
 
     const age = moment().diff(moment(dob, "YYYY-MM-DD"), "years");
-   
-    const files = req.files;
+   const files=req.files
     let referredBy = null;
     if (referralCode) {
       const refDoctor = await Doctor.findOne({
@@ -2321,11 +2320,6 @@ exports.addDoctorProfessional = async (req, res) => {
       await t.rollback();
       return Helper.response(false, "Doctor id is required", {}, res, 400);
     }
-<<<<<<< Updated upstream
-    const files = req.files;
-=======
-
->>>>>>> Stashed changes
     const doctor = await Doctor.findByPk(doctorId, { transaction: t });
     if (!doctor) {
       await t.rollback();
@@ -2983,7 +2977,7 @@ exports.getallDoctorById = async (req, res) => {
           /* ================= State ================= */
           const state = doctor.stateId
             ? await State.findOne({
-                where: { pk_uniqueid: doctor.stateId },
+                where: { statename: doctor.stateId, },
                 attributes: [
                   ["pk_uniqueid", "value"],
                   ["state_name_en", "label"],
@@ -2996,7 +2990,7 @@ exports.getallDoctorById = async (req, res) => {
           const district =
             doctor.cityId && doctor.cityId !== null
               ? await District.findOne({
-                  where: { pk_uniqueid: doctor.cityId },
+                  where: { districtname: doctor.cityId },
                   attributes: [
                     ["pk_uniqueid", "value"],
                     ["district_name_en", "label"],
