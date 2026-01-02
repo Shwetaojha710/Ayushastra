@@ -76,6 +76,10 @@ const Order = sequelize.define("Order", {
       type: DataTypes.BOOLEAN,
       allowNull: true
     },
+   txn_id: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
 
     payment_status: {
       type: DataTypes.STRING(50),

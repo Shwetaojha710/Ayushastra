@@ -21,6 +21,7 @@ const Qualification = sequelize.define("qualification", {
   certificate_no: { type: DataTypes.STRING, allowNull: true },
   certificate: { type: DataTypes.STRING, allowNull: true },
   certificate_type: { type: DataTypes.STRING, allowNull: true },
+  status: { type: DataTypes.BOOLEAN, allowNull: true,defaultValue:true },
 });
 
 Doctor.hasMany(Qualification, { foreignKey: "doctorId", onDelete: "CASCADE" });

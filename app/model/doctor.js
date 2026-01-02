@@ -10,7 +10,7 @@ const Doctor = sequelize.define("doctor", {
   },
   loginId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
   },
   refferedBy: {
     type: DataTypes.INTEGER,
@@ -18,7 +18,7 @@ const Doctor = sequelize.define("doctor", {
   },
   name: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     validate: {
       notEmpty: { msg: "Name is required" },
       len: { args: [2, 100], msg: "Name must be between 2 and 100 characters" },
@@ -26,7 +26,7 @@ const Doctor = sequelize.define("doctor", {
   },
   email: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     unique: true,
     validate: {
       isEmail: { msg: "Email must be valid" },
@@ -35,14 +35,14 @@ const Doctor = sequelize.define("doctor", {
   },
   dob: {
     type: DataTypes.DATEONLY,
-    allowNull: false,
+    allowNull: true,
     validate: {
       isDate: { msg: "Date of birth must be a valid date" },
     },
   },
   gender: {
     type: DataTypes.ENUM("male", "female", "other"),
-    allowNull: false,
+    allowNull: true,
     validate: {
       isIn: {
         args: [["male", "female", "other"]],
@@ -52,7 +52,7 @@ const Doctor = sequelize.define("doctor", {
   },
   age: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     validate: {
       isInt: { msg: "Age must be a number" },
       min: { args: [0], msg: "Age cannot be negative" },
@@ -117,19 +117,27 @@ const Doctor = sequelize.define("doctor", {
       len: { args: [12, 12], msg: "Aadhar number must be exactly 12 digits" },
     },
   },
-   degree: {
+  degree: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-   experience: {
+  experience: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-   universityName: {
+  universityName: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-   speciality: {
+  speciality: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  treatment_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  disease_id: {
     type: DataTypes.STRING,
     allowNull: true,
   },
@@ -160,7 +168,7 @@ const Doctor = sequelize.define("doctor", {
  
   password: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     validate: {
       notEmpty: { msg: "Password is required" },
       len: {
@@ -185,18 +193,18 @@ const Doctor = sequelize.define("doctor", {
       defaultValue: true,
     },
   KYCstatus: {
-    type: DataTypes.ENUM("pending", "approved","rejected"),
+    type: DataTypes.ENUM("pending", "approved","rejected", "change_requested",),
     defaultValue: "pending",
-    allowNull: false,
+    allowNull: true,
     validate: {
       isIn: {
-        args: [["pending", "approved","rejected"]],
-        msg: "Status must be pending,approved or rejected",
+        args: [["pending", "approved","rejected","change_requested"]],
+        msg: "KYCstatus must be pending,approved,change_requested or rejected",
       },
     },
   },
   year_of_completion:{
-  type:DataTypes.DATEONLY,
+  type:DataTypes.STRING,
   allowNull:true
   },
   joinDate: {
@@ -208,7 +216,11 @@ const Doctor = sequelize.define("doctor", {
     allowNull: true,
   },
   consultancyCharge: {
-    type: DataTypes.STRING,
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  appointmentCharge: {
+    type: DataTypes.INTEGER,
     allowNull: true,
   },
   addharFrontImage: {
@@ -255,13 +267,58 @@ const Doctor = sequelize.define("doctor", {
     type: DataTypes.INTEGER,
     allowNull: true,
   },
+  clinic_consultation: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  clinic_fee: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  online_consultation: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   token: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+   firebase_token: {
+     type: DataTypes.TEXT,
+     allowNull:true,
+   },
+  reason: {
     type: DataTypes.TEXT,
     allowNull: true,
   },
   is_feature: {
     type: DataTypes.BOOLEAN,
     allowNull: true,
+  },
+  is_profile: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue:'pending'
+  },
+  is_addhar_front: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue:'pending'
+  },
+  is_addhar_back: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue:'pending'
+  },
+  is_pan: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue:'pending'
+  },
+  is_certificate: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue:'pending'
   },
   createdBy: {
     type: DataTypes.UUID,
@@ -273,6 +330,17 @@ const Doctor = sequelize.define("doctor", {
     allowNull: true,
     defaultValue: null,
   },
+    email_verified: {
+     type: DataTypes.BOOLEAN,
+     allowNull:true,
+     defaultValue:false
+    },
+
+    mobile_verified: {
+     type: DataTypes.BOOLEAN,
+     allowNull:true,
+     defaultValue:false
+   },
 });
 
 // Doctor.sync({alter:true})

@@ -11,6 +11,10 @@ const sequelize = require("../connection/connection");
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    shipping_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     full_name: {
       type: DataTypes.STRING(100),
       allowNull: true
@@ -64,7 +68,7 @@ const sequelize = require("../connection/connection");
     },
     is_billing_same_as_shipping: {
       type: DataTypes.BOOLEAN,
-      defaultValue: false
+      defaultValue: true
     },
     type: {
       type: DataTypes.STRING,

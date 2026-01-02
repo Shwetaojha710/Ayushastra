@@ -20,6 +20,8 @@ const ReviewGallery = require("../../model/review_gallery");
 const referral_master = require("../../model/referral_master");
 const Partner = require("../../model/partner");
 const UserMonthPoints = require("../../model/user_month_points");
+const Unit = require("../../model/unit");
+const Doctor = require("../../model/doctor");
 // exports.UserRegistration = async (req, res) => {
 //   try {
 //     const {
@@ -566,180 +568,221 @@ exports.Userlogin = async (req, res) => {
     // -----------------------------------------------------------
     // 1 GMAIL LOGIN FLOW
     // -----------------------------------------------------------
-    if (type === "gmail") {
-      if (!fullName) {
-        await t.rollback();
-        return Helper.response(false, "Full Name is required", {}, res, 400);
-      }
+   if (type === "gmail") {
+  if (!fullName) {
+    await t.rollback();
+    return Helper.response(false, "Full Name is required", {}, res, 400);
+  }
 
-      let isNewUser = false;
+  let isNewUser = false;
 
-      // -----------------------------------------------------------
-      // CASE A: NEW Gmail User (First Time Login)
-      // -----------------------------------------------------------
-      if (!user) {
-        isNewUser = true;
+  // CASE A: NEW Gmail User
+  if (!user) {
+    isNewUser = true;
 
-        const [firstName, ...rest] = fullName.trim().split(" ");
-        const lastName = rest.join(" ");
+    const [firstName, ...rest] = fullName.trim().split(" ");
+    const lastName = rest.join(" ");
 
-        // Generate unique referral code
-        let referralCode = Helper.generateReferralCode(firstName || "USR");
+    let referralCode = Helper.generateReferralCode(firstName || "USR");
 
-        let codeExists = await registeredUser.findOne({
-          where: { referral_code: referralCode },
-        });
-        if (codeExists) {
-          referralCode = Helper.generateReferralCode(firstName || "USR");
-        }
-       let emailExists=  await registeredUser.findOne({
-          where: { email: trimmedEmail },
-        })
- 
-         if(!emailExists){
-         user = await registeredUser.create(
-          {
-            email: trimmedEmail,
-            type: "gmail",
-            first_name: firstName,
-            last_name: lastName,
-            profile_image: image || null,
-            referred_by: referrerUser?.id || null,
-            referral_code: referralCode,
-            ayucash_balance: referrerUser
-              ? newRegisterBonus + refereeBonus // 500 + 250
-              : newRegisterBonus,              // 500
-          },
-          { transaction: t }
-        );
-         }
-        
+    let codeExists = await registeredUser.findOne({
+      where: { referral_code: referralCode },
+    });
 
-        const month = Helper.getCurrentMonth().split("-")[1];
-        const year = Helper.getCurrentMonth().split("-")[0];
+    if (codeExists) {
+      referralCode = Helper.generateReferralCode(firstName || "USR");
+    }
 
-        // CASE A1 — New Gmail User WITH referral
-        if (referrerUser) {
-          await UserMonthPoints.create(
-            {
-              parent_id: referrerUser.id,
-              child_id: user.id,
-              month,
-              year,
-              ayu_points: refereeBonus, // 250
-            },
-            { transaction: t }
-          );
+    let emailExists = await registeredUser.findOne({
+      where: { email: trimmedEmail },
+    });
 
-          // Update parent's AYU cash
-          const updatedReferrerCash =
-            Number(referrerUser.ayucash_balance || 0) + referrerBonus;
-
-          await registeredUser.update(
-            { ayucash_balance: updatedReferrerCash },
-            { where: { id: referrerUser.id }, transaction: t }
-          );
-        } 
-        
-        // CASE A2 — New Gmail user WITHOUT referral
-        else {
-          await UserMonthPoints.create(
-            {
-              parent_id: user.id,
-              child_id: null,
-              month,
-              year,
-              ayu_points: newRegisterBonus, // 500
-            },
-            { transaction: t }
-          );
-        }
-      }
-
-      // -----------------------------------------------------------
-      // CASE B: EXISTING Gmail User logs in WITH referral (First Time Only)
-      // -----------------------------------------------------------
-      else if (user && referrerUser && !user.referred_by) {
-        // Assign referral only once
-        await registeredUser.update(
-          { referred_by: referrerUser.id },
-          { where: { id: user.id }, transaction: t }
-        );
-
-        const month = Helper.getCurrentMonth().split("-")[1];
-        const year = Helper.getCurrentMonth().split("-")[0];
-
-        // Add referral points for existing user
-        await UserMonthPoints.create(
-          {
-            parent_id: referrerUser.id,
-            child_id: user.id,
-            month,
-            year,
-            ayu_points: refereeBonus, // 250
-          },
-          { transaction: t }
-        );
-
-        // Update existing user's AYU cash
-        await registeredUser.update(
-          {
-            ayucash_balance:
-              Number(user.ayucash_balance || 0) + refereeBonus,
-          },
-          { where: { id: user.id }, transaction: t }
-        );
-
-        // Update parent user's AYU cash
-        await registeredUser.update(
-          {
-            ayucash_balance:
-              Number(referrerUser.ayucash_balance || 0) + referrerBonus,
-          },
-          { where: { id: referrerUser.id }, transaction: t }
-        );
-      }
-
-      // -----------------------------------------------------------
-      // LOGIN TOKEN
-      // -----------------------------------------------------------
-      const token = jwt.sign(
-        { id: user.id, role: user.role },
-        process.env.SECRET_KEY,
-        { expiresIn: "7d" }
-      );
-
-      await user.update({ token }, { transaction: t });
-
-      await t.commit();
-
-      // Fetch address after commit
-      const address = await Address.findAll({
-        where: { user_id: user.id, user_type: "registered_user" },
-      });
-
-      return Helper.response(
-        true,
-        isNewUser
-          ? "Account created & logged in successfully"
-          : "Logged in successfully",
+    if (!emailExists) {
+      user = await registeredUser.create(
         {
-          id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          mobile: user.mobile,
-          email: user.email,
-          token: user.token,
-          profile_image: user.profile_image,
-          referral_code: user.referral_code,
-          ayucash_balance: user.ayucash_balance,
-          address,
+          email: trimmedEmail,
           type: "gmail",
+          first_name: firstName,
+          last_name: lastName,
+          profile_image: image || null,
+          referred_by: referrerUser?.id || null,
+          referral_code: referralCode,
+          ayucash_balance: referrerUser
+            ? newRegisterBonus + refereeBonus
+            : newRegisterBonus,
         },
-        res,
-        200
+        { transaction: t }
       );
     }
+
+    const [year, month] = Helper.getCurrentMonth().split("-");
+
+    // A1: New Gmail user WITH referral
+    if (referrerUser) {
+      await UserMonthPoints.create(
+        {
+          parent_id: referrerUser.id,
+          child_id: user.id,
+          month,
+          year,
+          ayu_points: refereeBonus,
+        },
+        { transaction: t }
+      );
+
+      await registeredUser.update(
+        {
+          ayucash_balance:
+            Number(referrerUser.ayucash_balance || 0) + refereeBonus,
+        },
+        { where: { id: referrerUser.id }, transaction: t }
+      );
+    } 
+    // A2: New Gmail user WITHOUT referral
+    else {
+      await UserMonthPoints.create(
+        {
+          parent_id: user.id,
+          child_id: null,
+          month,
+          year,
+          ayu_points: newRegisterBonus,
+        },
+        { transaction: t }
+      );
+    }
+  }
+
+  // CASE B: Existing Gmail user logs in WITH referral (only once)
+  else if (user && referrerUser && !user.referred_by) {
+    await registeredUser.update(
+      { referred_by: referrerUser.id },
+      { where: { id: user.id }, transaction: t }
+    );
+
+    const [year, month] = Helper.getCurrentMonth().split("-");
+
+    await UserMonthPoints.create(
+      {
+        parent_id: referrerUser.id,
+        child_id: user.id,
+        month,
+        year,
+        ayu_points: refereeBonus,
+      },
+      { transaction: t }
+    );
+
+    await registeredUser.update(
+      {
+        ayucash_balance:
+          Number(user.ayucash_balance || 0) + refereeBonus,
+      },
+      { where: { id: user.id }, transaction: t }
+    );
+
+    await registeredUser.update(
+      {
+        ayucash_balance:
+          Number(referrerUser.ayucash_balance || 0) + refereeBonus,
+      },
+      { where: { id: referrerUser.id }, transaction: t }
+    );
+  }
+
+  // -----------------------------------------------------------
+  // LOGIN TOKEN
+  // -----------------------------------------------------------
+  const token = jwt.sign(
+    { id: user.id, role: user.role },
+    process.env.SECRET_KEY,
+    { expiresIn: "7d" }
+  );
+
+  await user.update({ token }, { transaction: t });
+
+  await t.commit();
+
+  // -----------------------------------------------------------
+  // FETCH ADDRESS
+  // -----------------------------------------------------------
+  const addressList = await Address.findAll({
+    where: { user_id: user.id, user_type: "registered_user" },
+    order: [["id", "ASC"]], // important for grouping
+    raw:true
+  });
+
+  // -----------------------------------------------------------
+  // GROUP ADDRESS (billing + shipping pairs)
+  // -----------------------------------------------------------
+  // function groupAddresses(list) {
+  //   const groups = [];
+
+  //   list.forEach(addr => {
+  //     let group = groups.find(g => {
+  //       return (
+  //         (addr.type == "billing" && !g.billing) ||
+  //         (addr.type == "shipping" && !g.shipping)
+  //       );
+  //     });
+
+  //     if (!group) {
+  //       group = { billing: null, shipping: null };
+  //       groups.push(group);
+  //     }
+
+  //     if (addr.type == "billing") group.billing = addr;
+  //     if (addr.type == "shipping") group.shipping = addr;
+  //   });
+
+  //   return groups;
+  // }
+
+  function groupAddresses(addresses) {
+  let billing = null;
+  let shipping = null;
+
+  const billingAddr = addresses.find(a => a.type == "billing");
+
+  if (billingAddr?.is_billing_same_as_shipping) {
+    billing = billingAddr;
+    shipping = billingAddr; // SAME OBJECT
+  } else {
+    // billing = billingAddr;
+    // shipping = addresses.find(a => a.type === "shipping") || null;
+  }
+
+  return { billing, shipping };
+}
+  const groupedAddresses = groupAddresses(addressList);
+
+  // -----------------------------------------------------------
+  // FINAL RESPONSE
+  // -----------------------------------------------------------
+  return Helper.response(
+    true,
+    isNewUser
+      ? "Account created & logged in successfully"
+      : "Logged in successfully",
+    {
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      mobile: user.mobile,
+      email: user.email,
+      token: user.token,
+      profile_image: user.profile_image,
+      referral_code: user.referral_code,
+      ayucash_balance: user.ayucash_balance,
+      address: groupedAddresses,  // <<< grouped address output
+      type,
+      user_type:"user"
+    },
+    res,
+    200
+  );
+}
+
 
     // -----------------------------------------------------------
     // NORMAL LOGIN (EMAIL + PASSWORD)
@@ -1184,7 +1227,10 @@ exports.Userlogout = async (req, res) => {
     if (!user) {
       const Users=await User.findByPk(userId)
       if(!Users){
-      return Helper.response(false, "User not found.", [], res, 404);
+        const deletedr=await Doctor.findByPk(userId)
+        if(!deletedr){
+          return Helper.response(false, "User not found.", [], res, 404);
+        }
       }else{
           // Clear the token from the user record
        await Users.update({ token: null });
@@ -1206,7 +1252,7 @@ exports.Userlogout = async (req, res) => {
     );
   } catch (err) {
     console.error("Logout error:", err);
-    return Helper.response(false, "Internal server error.", [], res, 500);
+    return Helper.response(false, err?.message, [], res, 500);
   }
 };
 
@@ -1235,59 +1281,138 @@ exports.myOrders = async (req, res) => {
       offset: Number(offset),
     });
 
+    // const finalData = await Promise.all(
+    //   orders.map(async (order) => {
+    //     const orderItems = await OrderItem.findAll({
+    //       where: { order_id: order.id },
+    //       raw: true,
+    //     });
+
+    //     let productNames = await Product.findAll({
+    //       where: {
+    //         id: orderItems.map((item) => item.product_id),
+    //       },
+    //       raw: true,
+    //       attributes: [
+    //         "product_name",
+
+    //         [col("meta_image"), "product_banner_image"],
+    //       ],
+    //     });
+        
+    //      productNames = orderItems.map(
+    //       (item) => item.Product?.name || "Product"
+    //     );
+    //     const review = await Review.findAll({
+    //       where: {
+    //         order_id: order?.id,
+    //       },
+    //       raw: true,
+    //       order: [["created_at", "desc"]],
+    //     });
+
+    //     let actions = ["View Details"];
+    //     if (order.order_status == "placed") actions.unshift("Write Review");
+    //     if (
+    //       order.order_status == "processing" ||
+    //       order.order_status == "shipped"
+    //     )
+    //       actions.unshift("Track Order");
+    //     if (order.order_status == "cancelled") actions.unshift("Reorder");
+    //     // if (order.order_status == "replaced") actions.unshift("Reorder");
+
+    //     return {
+    //       id: order.id,
+    //       orderId: order.order_no,
+    //       ayu_cash_apply: order?.ayu_cash_apply??'NA',
+    //       maxRedeemableAyuCash: order?.maxRedeemableAyuCash ?? 0,
+    //       date: moment(order.createdAt).format("YYYY-MM-DD"),
+    //       products: productNames.slice(0, 5),
+    //       status: order.order_status,
+    //       items: productNames.length,
+    //       total: Number(order.total_amount),
+    //       actions,
+    //       review: review ?? [],
+    //     };
+    //   })
+    // );
+
     const finalData = await Promise.all(
-      orders.map(async (order) => {
-        const orderItems = await OrderItem.findAll({
-          where: { order_id: order.id },
-          raw: true,
-        });
+  orders.map(async (order) => {
 
-        const productNames = await Product.findAll({
-          where: {
-            id: orderItems.map((item) => item.product_id),
-          },
-          raw: true,
-          attributes: [
-            "product_name",
+    // 1. Fetch order items
+    const orderItems = await OrderItem.findAll({
+      where: { order_id: order.id },
+      raw: true,
+    });
 
-            [col("meta_image"), "product_banner_image"],
-          ],
-        });
-        // const productNames = orderItems.map(
-        //   (item) => item.Product?.name || "Product"
-        // );
-        const review = await Review.findAll({
-          where: {
-            order_id: order?.id,
-          },
-          raw: true,
-          order: [["created_at", "desc"]],
-        });
+    // Extract product_ids
+    const productIds = orderItems.map(i => i.product_id);
 
-        let actions = ["View Details"];
-        if (order.order_status == "placed") actions.unshift("Write Review");
-        if (
-          order.order_status == "Processing" ||
-          order.order_status == "Shipped"
-        )
-          actions.unshift("Track Order");
-        if (order.order_status == "Cancelled") actions.unshift("Reorder");
+    // 2. Fetch products manually
+    const products = await Product.findAll({
+      where: { id: productIds },
+      raw: true,
+      attributes: ["id", "product_name", "meta_image", "unit"]
+    });
 
-        return {
-          id: order.id,
-          orderId: order.order_no,
-          ayu_cash_apply: order?.ayu_cash_apply??'NA',
-          maxRedeemableAyuCash: order?.maxRedeemableAyuCash ?? 0,
-          date: moment(order.createdAt).format("YYYY-MM-DD"),
-          products: productNames.slice(0, 5),
-          status: order.order_status,
-          items: productNames.length,
-          total: Number(order.total_amount),
-          actions,
-          review: review ?? [],
-        };
-      })
-    );
+    // extract unit ids (if unit field stores unit_id)
+    const unitIds = products.map(p => p.unit).filter(Boolean);
+
+    // 3. Fetch units manually
+    const units = await Unit.findAll({
+      where: { id: unitIds },
+      raw: true,
+      attributes: ["id", "name"]
+    });
+
+    // convert units to map for fast access
+    const unitMap = {};
+    units.forEach(u => (unitMap[u.id] = u.name));
+
+    // 4. Merge orderItems + products + units
+    const productDetails = orderItems.map(item => {
+      const product = products.find(p => p.id == item.product_id);
+
+      return {
+        product_name: product?.product_name ?? "NA",
+        quantity: item.quantity??0,
+        unit: unitMap[product?.unit] ?? "Unit",
+        banner: product?.meta_image ?? null,
+        product_banner_image: product?.meta_image ?? null
+      };
+    });
+
+    // 5. Fetch reviews
+    const review = await Review.findAll({
+      where: { order_id: order.id },
+      raw: true,
+      order: [["created_at", "desc"]],
+    });
+
+    // 6. Action Buttons
+    let actions = ["View Details"];
+    if (order.order_status === "placed") actions.unshift("Write Review");
+    if (["processing", "shipped"].includes(order.order_status))
+      actions.unshift("Track Order");
+    if (order.order_status === "cancelled") actions.unshift("Reorder");
+
+    // 7. Final response
+    return {
+      id: order.id,
+      orderId: order.order_no,
+      date: moment(order.createdAt).format("YYYY-MM-DD"),
+      products: productDetails.slice(0, 5),
+      items: productDetails.length,
+      status: order.order_status,
+      ayu_cash_apply: order?.ayu_cash_apply || false,
+      maxRedeemableAyuCash: order?.maxRedeemableAyuCash || 0,
+      total: Number(order.total_amount),
+      actions,
+      review
+    };
+  })
+);
 
     if (finalData.length == 0) {
       return Helper.response(false, "No Data Found", [], res, 200);
@@ -1413,50 +1538,84 @@ exports.viewAddressDetails = async (req, res) => {
 
 exports.UserAddressDetails = async (req, res) => {
   try {
-    const { id } = req.users;
+    const user_id = req.users?.id;
 
-    if (!id) {
-      return Helper.response(false, "ID is required", {}, res, 400);
+    if (!user_id) {
+      return Helper.response(false, "User ID is required", {}, res, 400);
     }
 
-    // Fetch address
-    const address = await Address.findAll({
-      where: { user_id: id, user_type: "registered_user" ,isSaved:true},
-      raw: true,
+    const addresses = await Address.findAll({
+      where: {
+        user_id,
+        isSaved: true,
+      },
       order: [["is_default", "DESC"]],
+      raw: true,
     });
 
-    if (!address) {
-      return Helper.response(false, "Address not found", {}, res, 404);
-    }
-
-    const finalData = await Promise.all(
-      address.map(async (item) => {
-        // const data = await registered_user.findOne({
-        //   where: {
-        //     id: item?.user_id,
-        //     isDeleted:false
-        //   },
-        // });
-
-        return {
-          ...item,
-          contact: {
-            name: `${item?.full_name}`,
-            phone: item?.mobile ?? 0,
-          },
-        };
-      })
-    );
-
-    if (finalData.length == 0) {
+    if (!addresses.length) {
       return Helper.response(false, "No Data Found", [], res, 200);
     }
+
+    // ---------- FORMATTER ----------
+    const formatAddress = (item) => ({
+      id: item.id,
+      full_name: item.full_name,
+      mobile: item.mobile,
+      address: item.address,
+      address_line2: item.address_line2,
+      city: item.city,
+      state: item.state,
+      postal_code: item.postal_code,
+      country: item.country,
+      is_default: item.is_default,
+      contact: {
+        name: item.full_name,
+        phone: item.mobile,
+      },
+    });
+
+    // ---------- GROUP BY address_type (HOME / OFFICE) ----------
+    const grouped = {};
+
+    for (const addr of addresses) {
+      const key = addr.address_type || "HOME";
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          address_type: key,
+          billing: null,
+          shipping: null,
+          isBillingSameAsShipping: false,
+        };
+      }
+
+      if (addr.type === "billing") {
+        grouped[key].billing = formatAddress(addr);
+        grouped[key].isBillingSameAsShipping =
+          addr.is_billing_same_as_shipping === true;
+      }
+
+      if (addr.type === "shipping") {
+        grouped[key].shipping = formatAddress(addr);
+      }
+    }
+
+    // ---------- HANDLE billing = shipping ----------
+    Object.values(grouped).forEach(group => {
+      if (
+        group.isBillingSameAsShipping === true &&
+        group.billing &&
+        !group.shipping
+      ) {
+        group.shipping = { ...group.billing };
+      }
+    });
 
     return Helper.response(
       true,
       "Address fetched successfully",
-      finalData,
+      Object.values(grouped),
       res,
       200
     );
@@ -1465,6 +1624,200 @@ exports.UserAddressDetails = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
+
+
+// exports.UserAddressDetails = async (req, res) => {
+//   try {
+//     const { id } = req.users;
+
+//     if (!id) {
+//       return Helper.response(false, "ID is required", {}, res, 400);
+//     }
+
+//     const addresses = await Address.findAll({
+//       where: {
+//         user_id: id,
+//         isSaved: true,
+//       },
+//       raw: true,
+//       order: [["is_default", "DESC"]],
+//     });
+
+//     if (!addresses || addresses.length === 0) {
+//       return Helper.response(false, "No Data Found", {}, res, 200);
+//     }
+
+//     // ---------- FORMATTER ----------
+//     const formatAddress = (item) => ({
+//       id: item.id,
+//       full_name: item.full_name,
+//       mobile: item.mobile,
+//       address: item.address,
+//       address_line2: item.address_line2,
+//       city: item.city,
+//       state: item.state,
+//       postal_code: item.postal_code,
+//       country: item.country,
+//       is_default: item.is_default,
+//       contact: {
+//         name: item.full_name,
+//         phone: item.mobile,
+//       },
+//     });
+
+//     // Index addresses by ID (for shipping_id lookup)
+//     const addressById = {};
+//     addresses.forEach((a) => {
+//       addressById[a.id] = formatAddress(a);
+//     });
+
+//     const response = [];
+
+//     // ---------- HOME ----------
+//     const homeAddress = addresses.find(a => a.type === "HOME");
+//     if (homeAddress) {
+//       response.push({
+//         address_type: homeAddress.address_type || "HOME",
+//         billing: {},
+//         shipping: {},
+//       });
+//     }
+
+//     // ---------- BILLING + SHIPPING ----------
+//     const billingAddress = addresses.find(a => a.type == "billing");
+
+//     if (billingAddress) {
+//       let shippingAddress = {};
+
+//       if (billingAddress.is_billing_same_as_shipping) {
+//         shippingAddress = formatAddress(billingAddress);
+//       } else if (billingAddress.shipping_id) {
+//         shippingAddress = addressById[billingAddress.shipping_id] || {};
+//       }
+
+//       response.push({
+//         address_type: billingAddress.address_type || "billing",
+//         billing: formatAddress(billingAddress),
+//         shipping: shippingAddress,
+//         isBillingSameAsShipping: billingAddress?.is_billing_same_as_shipping
+//       });
+//     }
+
+//     return Helper.response(
+//       true,
+//       "Address fetched successfully",
+//       response,
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     console.error("Address error:", error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
+
+// exports.UserAddressDetails = async (req, res) => {
+//   try {
+//     const { id } = req.users;
+
+//     if (!id) {
+//       return Helper.response(false, "ID is required", {}, res, 400);
+//     }
+
+    
+//     const addresses = await Address.findAll({
+//       where: {
+//         user_id: id,
+//         isSaved: true,
+//       },
+//       raw: true,
+//       order: [["is_default", "DESC"]],
+//     });
+
+//     if (!addresses || addresses.length === 0) {
+//       return Helper.response(false, "No Data Found", {}, res, 200);
+//     }
+
+//     // ---------- FORMAT DATA ----------
+//     const responseData = {
+//       home: [],
+//       billing: {
+//         shipping: [],
+//       },
+//     };
+
+//     addresses.forEach((item) => {
+//       const formattedAddress = {
+//         ...item,
+//         contact: {
+//           name: item.full_name,
+//           phone: item.mobile ?? "",
+//         },
+//       };
+
+//       if (item.type === "home") {
+//         responseData.home.push(formattedAddress);
+//       }
+
+//       if (item.type === "billing" && item.shipping_type === "shipping") {
+//         responseData.billing.shipping.push(formattedAddress);
+//       }
+//     });
+
+//     return Helper.response(
+//       true,
+//       "Address fetched successfully",
+//       responseData,
+//       res,
+//       200
+//     );
+
+//     // // Fetch address
+//     // const address = await Address.findAll({
+//     //   where: { user_id: id,isSaved:true},
+//     //   raw: true,
+//     //   order: [["is_default", "DESC"]],
+//     // });
+
+//     // if (!address) {
+//     //   return Helper.response(false, "Address not found", {}, res, 404);
+//     // }
+
+//     // const finalData = await Promise.all(
+//     //   address.map(async (item) => {
+//     //     // const data = await registered_user.findOne({
+//     //     //   where: {
+//     //     //     id: item?.user_id,
+//     //     //     isDeleted:false
+//     //     //   },
+//     //     // });
+
+//     //     return {
+//     //       ...item,
+//     //       contact: {
+//     //         name: `${item?.full_name}`,
+//     //         phone: item?.mobile ?? 0,
+//     //       },
+//     //     };
+//     //   })
+//     // );
+
+//     // if (finalData.length == 0) {
+//     //   return Helper.response(false, "No Data Found", [], res, 200);
+//     // }
+
+//     // return Helper.response(
+//     //   true,
+//     //   "Address fetched successfully",
+//     //   finalData,
+//     //   res,
+//     //   200
+//     // );
+//   } catch (error) {
+//     console.error("Address error:", error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
 
 exports.UpdateProfile = async (req, res) => {
   try {
@@ -1607,67 +1960,139 @@ exports.deleteAccount = async (req, res) => {
 exports.updateAddress = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
-    const {
-      id,
-
-      full_name,
-      mobile,
-      address,
-      address_line2,
-      city,
-      state,
-      postal_code,
-      country,
-      address_type,
-      is_default,
-    } = req.body;
     const user_id = req.users?.id;
-    // Validate
-    if (!id) {
+
+    const {
+      addresses,
+      isBillingSameAsShipping = false,
+      isSaved = true,
+      address_type,
+      shipping_id,
+      billing_id,
+      is_default
+    } = req.body;
+
+      if (!user_id ) {
       await transaction.rollback();
-      return Helper.response(false, "Address ID are required", [], res, 400);
+      return Helper.response(false, "Invalid payload", [], res, 400);
+    }
+  
+
+     // Reset default only for SAME TYPE
+      if (is_default == true) {
+         await Address.update(
+          { is_default:false},
+          {
+            where: { user_id },
+            transaction,
+          }
+        );
+        await Address.update(
+          { is_default},
+          {
+            where: { user_id, address_type },
+            transaction,
+          }
+        );
+         await transaction.commit();
+        return Helper.response(true,"Data Updated Successfully",{},res,200)
+      }
+
+    // if (!user_id || !Array.isArray(addresses) || addresses.length === 0) {
+    //   await transaction.rollback();
+    //   return Helper.response(false, "Invalid payload", [], res, 400);
+    // }
+
+    const updatedAddresses = [];
+
+    //  If billing same as shipping → clone shipping
+    let finalAddresses = addresses;
+
+    if (isBillingSameAsShipping === true) {
+      const shipping = addresses.find(a => a.type === "shipping");
+
+      if (!shipping || !shipping_id) {
+        await transaction.rollback();
+        return Helper.response(
+          false,
+          "Shipping address required",
+          [],
+          res,
+          400
+        );
+      }
+
+      finalAddresses = [
+        { ...shipping, type: "shipping", id: shipping_id },
+        { ...shipping, type: "billing", id: billing_id || shipping_id },
+      ];
     }
 
-    // Check if address exists
-    const existingAddress = await Address.findOne({
-      where: { id, user_id },
-      transaction,
-    });
-    if (!existingAddress) {
-      await transaction.rollback();
-      return Helper.response(false, "Address not found", [], res, 404);
-    }
+    for (const item of finalAddresses) {
+      const {
+        id,
+        type,
+        full_name,
+        mobile,
+        address,
+        apartment,
+        city,
+        state,
+        postal_code,
+        country = "India",
+        is_default = false,
+      } = item;
 
-    // If new address is set as default, reset other addresses for the same user
-    if (is_default === true) {
-      await Address.update(
-        { is_default: false },
-        { where: { user_id }, transaction }
+      if (!id || !type) {
+        await transaction.rollback();
+        return Helper.response(
+          false,
+          "Address id and type required",
+          [],
+          res,
+          400
+        );
+      }
+
+      const existingAddress = await Address.findOne({
+        where: { id, user_id, type },
+        transaction,
+      });
+
+      if (!existingAddress) {
+        await transaction.rollback();
+        return Helper.response(false, "Address not found", [], res, 404);
+      }
+
+   
+
+      await existingAddress.update(
+        {
+          full_name,
+          mobile,
+          address,
+          address_line2: apartment,
+          city,
+          state,
+          postal_code,
+          country,
+          is_default,
+          address_type,
+          isSaved,
+          is_billing_same_as_shipping: isBillingSameAsShipping,
+        },
+        { transaction }
       );
+
+      updatedAddresses.push(existingAddress);
     }
-
-    // Update address fields
-    existingAddress.full_name = full_name || existingAddress.full_name;
-    existingAddress.mobile = mobile || existingAddress.mobile;
-    existingAddress.address = address || existingAddress.address;
-    existingAddress.address_line2 =
-      address_line2 || existingAddress.address_line2;
-    existingAddress.city = city || existingAddress.city;
-    existingAddress.state = state || existingAddress.state;
-    existingAddress.postal_code = postal_code || existingAddress.postal_code;
-    existingAddress.country = country || existingAddress.country;
-    existingAddress.address_type = address_type || existingAddress.address_type;
-    existingAddress.is_default =
-      is_default !== undefined ? is_default : existingAddress.is_default;
-
-    await existingAddress.save({ transaction });
 
     await transaction.commit();
 
     return Helper.response(
       true,
       "Address updated successfully",
-      existingAddress,
+      updatedAddresses,
       res,
       200
     );
@@ -1678,73 +2103,218 @@ exports.updateAddress = async (req, res) => {
   }
 };
 
+
+// exports.updateAddress = async (req, res) => {
+//   const transaction = await sequelize.transaction();
+//   try {
+//     const {
+//       id,
+
+//       full_name,
+//       mobile,
+//       address,
+//       address_line2,
+//       city,
+//       state,
+//       postal_code,
+//       country,
+//       address_type,
+//       is_default,
+//     } = req.body;
+//     const user_id = req.users?.id;
+//     // Validate
+//     if (!id) {
+//       await transaction.rollback();
+//       return Helper.response(false, "Address ID are required", [], res, 400);
+//     }
+
+//     // Check if address exists
+//     const existingAddress = await Address.findOne({
+//       where: { id, user_id },
+//       transaction,
+//     });
+//     if (!existingAddress) {
+//       await transaction.rollback();
+//       return Helper.response(false, "Address not found", [], res, 404);
+//     }
+
+//     // If new address is set as default, reset other addresses for the same user
+//     if (is_default == true) {
+//       await Address.update(
+//         { is_default: false },
+//         { where: { user_id }, transaction }
+//       );
+//     }
+
+//     // Update address fields
+//     existingAddress.full_name = full_name || existingAddress.full_name;
+//     existingAddress.mobile = mobile || existingAddress.mobile;
+//     existingAddress.address = address || existingAddress.address;
+//     existingAddress.address_line2 =
+//       address_line2 || existingAddress.address_line2;
+//     existingAddress.city = city || existingAddress.city;
+//     existingAddress.state = state || existingAddress.state;
+//     existingAddress.postal_code = postal_code || existingAddress.postal_code;
+//     existingAddress.country = country || existingAddress.country;
+//     existingAddress.address_type = address_type || existingAddress.address_type;
+//     existingAddress.is_default =
+//       is_default !== undefined ? is_default : existingAddress.is_default;
+
+//     await existingAddress.save({ transaction });
+
+//     await transaction.commit();
+
+//     return Helper.response(
+//       true,
+//       "Address updated successfully",
+//       existingAddress,
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     await transaction.rollback();
+//     console.error("Error updating address:", error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
+
 exports.addAddress = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
+    const user_id = req.users?.id;
+
     const {
-      full_name,
-      mobile,
-      address,
-      address_line2,
-      city,
-      state,
-      postal_code,
-      country = "India",
-      address_type,
-      is_default = false,
+      addresses,
+      isBillingSameAsShipping = false,
+      isSaved = true,
+      address_type
     } = req.body;
 
-    const user_id = req.users?.id;
-    if (
-      !user_id ||
-      !full_name ||
-      !mobile ||
-      !address ||
-      !city ||
-      !state ||
-      !postal_code
-    ) {
+    if (!user_id || !Array.isArray(addresses) || addresses.length === 0) {
       await transaction.rollback();
       return Helper.response(
         false,
-        "Please provide all required fields",
+        "Invalid address payload",
         [],
         res,
         400
       );
     }
+ 
 
-    if (is_default === true) {
-      await Address.update(
-        { is_default: false },
-        { where: { user_id, user_type: "registered_user" }, transaction }
-      );
+    const userAddExists=await Address.findOne({
+      where:{
+        user_id,
+        address_type
+      }
+    })
+    if(userAddExists){
+       return Helper.response(false,"CHANGE Address type",{},res,200)
     }
 
-    const newAddress = await Address.create(
-      {
-        user_id,
+    const createdAddresses = [];
+
+    // 🔹 If billing same as shipping, keep only shipping
+    let finalAddresses = addresses;
+
+    if (isBillingSameAsShipping === true) {
+      const shippingAddress = addresses.find(a => a.type === "shipping");
+
+      if (!shippingAddress) {
+        await transaction.rollback();
+        return Helper.response(
+          false,
+          "Shipping address required when billing is same as shipping",
+          [],
+          res,
+          400
+        );
+      }
+
+      finalAddresses = [
+        { ...shippingAddress, type: "shipping" },
+        { ...shippingAddress, type: "billing" },
+      ];
+    }
+
+    for (const item of finalAddresses) {
+      const {
+        type, // shipping / billing
         full_name,
         mobile,
         address,
-        address_line2,
+        apartment,
         city,
         state,
         postal_code,
-        country,
-        address_type,
-        is_default,
-        user_type: "registered_user",
-      },
-      { transaction }
-    );
+        country = "India",
+        is_default = false,
+      } = item;
+
+      if (
+        !type ||
+        !full_name ||
+        !mobile ||
+        !address ||
+        !city ||
+        !state ||
+        !postal_code
+      ) {
+        await transaction.rollback();
+        return Helper.response(
+          false,
+          "Missing required address fields",
+          [],
+          res,
+          400
+        );
+      }
+
+      // 🔹 Reset default for same type
+      if (is_default === true) {
+        await Address.update(
+          { is_default: false },
+          {
+            where: {
+              user_id,
+              type,
+              user_type: "registered_user",
+            },
+            transaction,
+          }
+        );
+      }
+
+      const newAddress = await Address.create(
+        {
+          user_id,
+          full_name,
+          mobile,
+          address,
+          address_line2: apartment || null,
+          city,
+          state,
+          postal_code,
+          country,
+          is_default,
+          type,
+          address_type,
+          user_type: "registered_user",
+          isSaved,
+          is_billing_same_as_shipping: isBillingSameAsShipping,
+        },
+        { transaction }
+      );
+
+      createdAddresses.push(newAddress);
+    }
 
     await transaction.commit();
 
     return Helper.response(
       true,
-      "Address added successfully",
-      newAddress,
+      "Addresses added successfully",
+      createdAddresses,
       res,
       200
     );
@@ -1755,15 +2325,98 @@ exports.addAddress = async (req, res) => {
   }
 };
 
+
+// exports.addAddress = async (req, res) => {
+//   const transaction = await sequelize.transaction();
+//   try {
+//     const {
+//       full_name,
+//       mobile,
+//       address,
+//       address_line2,
+//       city,
+//       state,
+//       postal_code,
+//       country = "India",
+//       address_type,
+//       is_default = false,
+//     } = req.body;
+
+//     const user_id = req.users?.id;
+//     if (
+//       !user_id ||
+//       !full_name ||
+//       !mobile ||
+//       !address ||
+//       !city ||
+//       !state ||
+//       !postal_code
+//     ) {
+//       await transaction.rollback();
+//       return Helper.response(
+//         false,
+//         "Please provide all required fields",
+//         [],
+//         res,
+//         400
+//       );
+//     }
+
+//     if (is_default === true) {
+//       await Address.update(
+//         { is_default: false },
+//         { where: { user_id, user_type: "registered_user" }, transaction }
+//       );
+//     }
+
+//     const newAddress = await Address.create(
+//       {
+//         user_id,
+//         full_name,
+//         mobile,
+//         address,
+//         address_line2,
+//         city,
+//         state,
+//         postal_code,
+//         country,
+//         address_type,
+//         is_default,
+//         user_type: "registered_user",
+//       },
+//       { transaction }
+//     );
+
+//     await transaction.commit();
+
+//     return Helper.response(
+//       true,
+//       "Address added successfully",
+//       newAddress,
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     await transaction.rollback();
+//     console.error("Error adding address:", error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
+
 exports.deleteAddress = async (req, res) => {
   try {
     const { id } = req.body;
-    if(!id){
-      return Helper.response(false,"Id Is Required",{},res,400)
+      const user_id = req.users?.id;
+      const {address_type}=req.body
+    // if(!id){
+    //   return Helper.response(false,"Id Is Required",{},res,400)
+    // }
+    if(!address_type){
+      return Helper.response(false,"address_type Is Required",{},res,400)
     }
      const DeleteAddress = await Address.destroy({
       where: {
-        id,
+        user_id,address_type
       },
     });
     // const DeleteAddress = await Address.destroy({
@@ -1894,6 +2547,31 @@ exports.getUser = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const {id,status}=req.body
+    if(!id){
+      return Helper.response(false,"Id is required",{},res,200)
+    }
+    const user =await User.findOne({
+      where:{
+        id
+      }
+    })
+
+    if (!user) {
+      return Helper.response(false, "No User Found", [], res, 200);
+    }
+await User.update(
+  { status },
+  { where: { id } }
+);
+    return Helper.response(true, "Data Found Successfully", user, res, 200);
+  } catch (error) {
+    console.error("Error adding Review:", error);
+    return Helper.response(false, error.message, {}, res, 500);
+  }
+};
 
 exports.getRegisteredUser = async (req, res) => {
   try {
@@ -1926,3 +2604,38 @@ exports.getRegisteredUser = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
+
+
+exports.updateRegisteredUser=async(req,res)=>{
+  try {
+    
+    const {id,status}=req.body
+
+    if(!id){
+      return Helper.response(false,"Id is required",{},res,400)
+    }
+    const regdata=await registered_user.findOne({
+      where:{
+         id
+      },
+      rar:true
+    })
+    if(!regdata){
+      return Helper.response(false,"No user Found",{},res,404)
+    }
+    const updatereguser=await registered_user.update({
+        status
+    },{
+      where:{
+        id
+      }
+    })
+    
+    return Helper.response(true,"Data Updated Successfully",{},res,200)
+
+
+  } catch (error) {
+    console.error("Error adding Review:", error);
+    return Helper.response(false, error.message, {}, res, 500);
+  }
+}
