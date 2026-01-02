@@ -320,6 +320,7 @@ exports.getReferralStats = async (req, res) => {
         color: "#384632",
       },
     ];
+    
     return Helper.response(true, "Data Found Successfully", stats, res, 200);
   } catch (error) {
     console.log(error, "error: user dahboard");
@@ -726,14 +727,14 @@ exports.getReferralList = async (req, res) => {
     // ---------------------------------------------------------
     // 2 TOTAL DIRECT REFERRALS
     // ---------------------------------------------------------
-    if (type === "Total Direct Referrals") {
+    if (type == "Total Direct Referrals") {
       finalList = referredUsers.map((u) => ({
         id: u.id,
-        child_user: u.name,
-        email: u.email,
-        mobile: u.mobile,
-        profile_image: u.profile_image,
-        profile_image: u.profile_image,
+        child_user: u?.name,
+        email: u?.email,
+        mobile: u?.mobile,
+        profile_image: u?.profile_image,
+        // profile_image: u?.profile_image,
         // joined_on: Helper.formatDate(u.createdAt),
         points: ayuPointMap[u.id] || 0,
       }));
@@ -946,7 +947,7 @@ exports.calculateReferralIncentive = async (req, res) => {
   try {
     const userId = req.users?.id; // Mr X
 
-    // 1️⃣ Validate partner eligibility
+    //  Validate partner eligibility
     const directUsers = await registered_user.count({
       where: { referred_by: userId },
     });

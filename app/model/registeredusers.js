@@ -108,6 +108,10 @@ const registered_user = sequelize.define(
      allowNull:true,
      defaultValue:false
    },
+    firebase_token: {
+     type: DataTypes.TEXT,
+     allowNull:true,
+   },
 
   },
   {

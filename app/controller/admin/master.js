@@ -26,6 +26,11 @@ const fs = require("fs");
 const moment = require("moment");
 const DoctorSlot = require("../../model/doctor_slots.js");
 const CityMaster = require("../../model/city_master.js");
+const clinic = require("../../model/clinic.js");
+const DoctorChangeRequest = require("../../model/doctor_change_requests.js");
+const department = require("../../model/department.js");
+const Experience = require("../../model/experience.js");
+const treatment_master = require("../../model/treatment_master.js");
 // product_gallery
 
 exports.addDiseases = async (req, res) => {
@@ -1200,6 +1205,128 @@ exports.getAllProducts = async (req, res) => {
   }
 };
 
+exports.ProductById = async (req, res) => {
+  try {
+    const {id}=req.body
+    if(!id){
+      return Helper.response(false,"Id Is Required",{},res,200)
+    }
+    const products = await Product.findAll({
+      where:{
+         id:id
+      },
+      order: [["id", "ASC"]],
+      raw: true,
+    });
+
+    if (products.length === 0) {
+      return Helper.response(false, "No Data Found", [], res, 200);
+    }
+
+    const finalData = await Promise.all(
+      products.map(async (item) => {
+        const ProductGallery = await product_gallery.findAll({
+          where: { productId: item.id },
+          raw: true,
+          order: [["id", "ASC"]],
+        });
+        const ingredientIds = item.ingredient_id
+          ? item.ingredient_id
+              .split(",")
+              .map((i) => parseInt(i.trim()))
+              .filter((i) => !isNaN(i))
+          : [];
+        const disease_id = item.disease_id
+          ? item.disease_id
+              .split(",")
+              .map((i) => parseInt(i.trim()))
+              .filter((i) => !isNaN(i))
+          : [];
+        return {
+          ...item,
+          product_gallery: ProductGallery,
+          disease: await Diseases.findAll({
+            where: {
+              id: {
+                [Op.in]: disease_id,
+              },
+            },
+            raw: true,
+            attributes: [
+              [col("id"), "value"],
+              [col("name"), "label"],
+            ],
+          }),
+          ingredient: await Ingredient.findAll({
+            where: {
+              id: {
+                [Op.in]: ingredientIds,
+              },
+            },
+            raw: true,
+            attributes: [
+              [col("id"), "value"],
+              [col("name"), "label"],
+            ],
+          }),
+          category: await Category.findOne({
+            where: { id: item?.category_id },
+            raw: true,
+            attributes: [
+              [col("id"), "value"],
+              [col("name"), "label"],
+            ],
+          }),
+          brand: await Brand.findOne({
+            where: { id: item?.brand_id },
+            raw: true,
+            attributes: [
+              [col("id"), "value"],
+              [col("name"), "label"],
+            ],
+          }),
+          product_types: await ProductType.findOne({
+            where: { id: item?.product_type },
+            raw: true,
+            attributes: [
+              [col("id"), "value"],
+              [col("name"), "label"],
+            ],
+          }),
+          unit_data: item?.unit
+            ? await Unit.findOne({
+                where: { id: item?.unit },
+                raw: true,
+                attributes: [
+                  [col("id"), "value"],
+                  [col("name"), "label"],
+                ],
+              })
+            : null,
+        };
+      })
+    );
+
+    return Helper.response(
+      true,
+      "Data Found Successfully",
+      finalData[0],
+      res,
+      200
+    );
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    return Helper.response(
+      false,
+      error?.message || "Something went wrong",
+      [],
+      res,
+      500
+    );
+  }
+};
+
+
 exports.getAllProductsDD = async (req, res) => {
   try {
     const products = await Product.findAll({
@@ -1293,7 +1420,9 @@ exports.updateProduct = async (req, res) => {
       slug,
       discount_type: req.body.discount_type,
       final_price: req.body.final_price,
-      product_meta_title: req.body.product_meta_title? req.body.product_meta_title: product?.product_meta_title,
+      product_meta_title: req.body.product_meta_title
+        ? req.body.product_meta_title
+        : product?.product_meta_title,
     };
 
     // Update meta image if uploaded
@@ -1650,15 +1779,15 @@ exports.updatecoupon = async (req, res) => {
       return Helper.response(false, "Coupon not found", [], res, 404);
     }
 
-    coupon.coupon_name = coupon_name;
-    coupon.product_id = product_id;
-    (coupon.min_amount = min_amount), (coupon.max_discount = max_discount);
-    coupon.start_time = start_time;
-    coupon.end_time = end_time;
-    coupon.usage_per_user = usage_per_user;
-    coupon.coupon_count = coupon_count;
+    coupon.coupon_name = coupon_name??coupon?.coupon_name;
+    coupon.product_id = product_id??coupon?.product_id;
+    (coupon.min_amount = min_amount??coupon?.min_amount), (coupon.max_discount = max_discount??coupon.max_discount);
+    coupon.start_time = start_time ?? coupon?.start_time;
+    coupon.end_time = end_time ?? coupon?.end_time;
+    coupon.usage_per_user = usage_per_user  ?? coupon?.usage_per_user;
+    coupon.coupon_count = coupon_count  ?? coupon?.coupon_count;
     coupon.status = status;
-    coupon.description = description;
+    coupon.description = description ?? coupon?.description;
     coupon.discount_type = discount_type ?? coupon?.discount_type;
     coupon.user_id = user_id ?? coupon?.user_id;
     coupon.updatedBy = req.users.id;
@@ -1834,6 +1963,8 @@ exports.addDoctor = async (req, res) => {
       phoneConsult: body.alt_mobile,
       phone: body.mobile,
       speciality: body.specialization,
+      disease_id: body.disease_id,
+      treatment_id: body.treatment_id,
       about: body.bio,
       registrationNo: body.registration,
       registrationDate: new Date(body.year_of_completion),
@@ -1861,6 +1992,8 @@ exports.addDoctor = async (req, res) => {
       known_language: body.known_language,
       refferalCode: referral_code,
       refferedBy: body.refferedBy,
+      appointmentCharge: body?.appointment_fees ?? 0,
+      // consultancyCharge: body?.online_consultation_fees ??0,
     };
 
     // Save doctor
@@ -1888,9 +2021,25 @@ exports.addDoctor = async (req, res) => {
       });
       index++;
     }
-
     if (qualifications.length > 0)
       await Qualification.bulkCreate(qualifications);
+    // Handle Experience
+    const experience = [];
+    let index1 = 0;
+
+    while (body[`experiences[${index}].organization`]) {
+      experience.push({
+        doctorId: doctor.id,
+        organization: body[`experiences[${index}].organization`],
+        department_id: new Date(body[`experiences[${index}].department_id`]),
+        from_date: body[`experiences[${index}].from_date`],
+        to_date: body[`experiences[${index}].to_date`],
+        is_current: body[`experiences[${index}].is_current`],
+      });
+      index1++;
+    }
+    if (experience.length > 0) await Experience.bulkCreate(qualifications);
+
     return Helper.response(
       true,
       "Doctor added successfully",
@@ -1914,11 +2063,489 @@ exports.addDoctor = async (req, res) => {
     return Helper.response(false, error?.message, {}, res, 500);
   }
 };
+
+exports.addDoctorPersonal = async (req, res) => {
+  // console.log("api called11");
+  const t = await sequelize.transaction();
+  try {
+    const {
+      referralCode,
+      doctor_name,
+      email,
+      mobile,
+      email_verified,
+      mobile_verified,
+      dob,
+      gender,
+      pincode,
+      city,
+      state,
+      address,
+      languages,
+      bio,
+      // profileImage,
+      loginId,
+
+    } = req.body;
+
+    if (!doctor_name || !mobile || !dob || !gender) {
+      return Helper.response(false, "Required fields missing", {}, res, 400);
+    }
+
+       
+    let doctor = await Doctor.findOne({
+      where: {
+        [Op.or]:{
+        phone: mobile,
+        email
+        }
+       },
+      transaction: t,
+    });
+
+    // console.log(req.body,"body data111");
+
+    const age = moment().diff(moment(dob, "DD/MM/YYYY"), "years");
+   const files=req.files
+    let referredBy = null;
+    if (referralCode) {
+      const refDoctor = await Doctor.findOne({
+        where: { refferalCode: referralCode },
+      });
+      if (refDoctor) referredBy = refDoctor.id;
+    }
+    // --------------------
+    // PROFILE IMAGE
+    // --------------------
+    const profileImage =
+      files?.profile_img && files.profile_img.length
+        ? path.basename(files.profile_img[0].path)
+        : null;
+
+    if (!doctor) {
+      doctor = await Doctor.create(
+        {
+          loginId: 1,
+          password: "123456",
+          name: doctor_name,
+          email: email || null,
+          phone: mobile,
+          dob: moment(dob, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          age,
+          gender,
+          pinCode: pincode,
+          cityId: city,
+          stateId: state,
+          address,
+          known_language: languages ?? null,
+          about: bio,
+          profileImage,
+          refferedBy: referredBy,
+          mobile_verified: mobile_verified,
+          email_verified: email_verified,
+          is_profile: "completed",
+          regType: "doctor",
+        },
+        { transaction: t }
+      );
+    } else {
+      await doctor.update(
+        {
+          name: doctor_name,
+          email: email || doctor.email,
+          dob: moment(dob, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          age,
+          gender,
+          pinCode: pincode,
+          cityId: city,
+          stateId: state,
+          address,
+          known_language: languages ?? doctor.known_language,
+          about: bio,
+          profileImage: profileImage || doctor.profileImage,
+          mobile_verified: mobile_verified,
+          email_verified: email_verified,
+          is_profile: "completed",
+        },
+        { transaction: t }
+      );
+    }
+
+    await t.commit();
+
+    return Helper.response(
+      true,
+      "Doctor profile saved successfully",
+      {
+        id: doctor.id,
+        name: doctor.name,
+        mobile: doctor.phone,
+        email: doctor.email,
+        profile_completed: true,
+      },
+      res,
+      200
+    );
+  } catch (error) {
+    await t.rollback();
+    console.error(error);
+    return Helper.response(false, error?.errors[0]?.message, {}, res, 500);
+  }
+};
+
+exports.addDoctorProfessional = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const doctorId = req.users?.id || req.body.doctor_id;
+
+    const {
+      specializations = [],
+      qualifications = [],
+      experiences = [],
+      medical_council_number,
+      total_experince,
+    } = req.body;
+
+    if (!doctorId) {
+      return Helper.response(false, "Doctor id is required", {}, res, 400);
+    }
+    const files = req.file;
+    const doctor = await Doctor.findByPk(doctorId, { transaction: t });
+    if (!doctor) {
+      return Helper.response(false, "Doctor not found", {}, res, 404);
+    }
+
+    const certFile = files?.["council_certificate"]
+      ? `${path.basename(files?.["council_certificate"].path)}`
+      : null;
+
+    await doctor.update(
+      {
+        speciality: Array.isArray(specializations)
+          ? specializations.join(",")
+          : doctor.speciality,
+        registrationNo: medical_council_number || doctor.registrationNo,
+        experience: total_experince ??  doctor.experience,
+        is_profile: "completed",
+        cert_image: certFile,
+      },
+      { transaction: t }
+    );
+    // const qualifications = [];
+    // let index = 0;
+
+    // while (body[`qualifications[${index}].degree`]) {
+    //   const certFile = files[`qualifications[${index}].certificate`]
+    //     ? `${path.basename(
+    //         files[`qualifications[${index}].certificate`][0].path
+    //       )}`
+    //     : null;
+
+    //   qualifications.push({
+    //     doctorId: doctor.id,
+    //     degree: body[`qualifications[${index}].degree`],
+    //     passing_year: new Date(body[`qualifications[${index}].passing_year`]),
+    //     university: body[`qualifications[${index}].university`],
+    //     certificate_no: body[`qualifications[${index}].certificate_no`],
+    //     certificate: certFile,
+    //     certificate_type: body[`qualifications[${index}].certificate_type`],
+    //   });
+    //   index++;
+    // }
+    // if (qualifications.length > 0)
+    //   await Qualification.bulkCreate(qualifications);
+
+    if (qualifications.length) {
+      const qualificationExits = await Qualification.findOne({
+        where: { doctorId: doctorId },
+      });
+      if (qualificationExits) {
+        await Qualification.destroy({
+          where: { doctorId: doctorId },
+          transaction: t,
+        });
+      }
+   
+      const qualificationRows = qualifications.map((q) => ({
+        doctorId: doctorId,
+        degree: q.degree,
+        university: q.institution,
+         certificate: certFile,
+        certificate_no: q.certificate_no,
+        certificate_type: q.certificate_type,
+        passing_year: q.year,
+      }));
+
+      await Qualification.bulkCreate(qualificationRows, {
+        transaction: t,
+      });
+    }
+
+    if (experiences.length) {
+      const ExperienceExits = await Experience.findOne({
+        where: { doctorId: doctorId },
+      });
+      if (ExperienceExits) {
+        await Experience.destroy({
+          where: { doctorId: doctorId },
+          transaction: t,
+        });
+      }
+
+      const experienceRows = experiences.map((e) => ({
+        doctorId: doctorId,
+        // position: e.position,
+        organization: e.organization,
+        from_date: e.start_date,
+        department_id: e.department_id,
+        to_date: e.end_date ? e.end_date : null,
+        is_current: e.currently_working,
+        status: true,
+      }));
+
+      await Experience.bulkCreate(experienceRows, {
+        transaction: t,
+      });
+    }
+
+    await t.commit();
+
+    return Helper.response(
+      true,
+      "Doctor professional details saved successfully",
+      {
+        doctor_id: doctorId,
+        step2_completed: true,
+      },
+      res,
+      200
+    );
+  } catch (error) {
+    await t.rollback();
+    console.error(error);
+    return Helper.response(false, error.message, {}, res, 500);
+  }
+};
+
+exports.setDoctorAvailability = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const doctorId = req.users?.id; // from auth middleware
+ 
+    if (!doctorId) {
+      return Helper.response(false, "Doctor ID required", {}, res, 400);
+    }
+ 
+    const {
+      slot_duration,
+      online_consultation,
+      online_fee,
+      clinic_consultation,
+      clinic_fee,
+      availability,
+    } = req.body;
+     console.log(req.body);
+     
+    if (!slot_duration || !Array.isArray(availability)) {
+      return Helper.response(false, "slot duration and Availability Is required", {}, res, 400);
+    }
+ 
+    await Doctor.update(
+      {
+        duration: slot_duration,
+        online_consultation_fees: online_fee || 0,
+        clinic_consultation: clinic_consultation || 0,
+        clinic_fee: clinic_fee || 0,
+        online_consultation: online_consultation || 0,
+      },
+      { where: { id: doctorId }, transaction: t }
+    );
+ 
+ 
+    await DoctorSlot.destroy({
+      where: { doctorId,session_type: { [Op.in]: ["online"] } },
+      transaction: t,
+    });
+ 
+    const slotRows = [];
+ 
+    availability.forEach((dayObj) => {
+      const day = dayObj.day?.toLowerCase();
+ 
+      if (!Array.isArray(dayObj.slots)) return;
+ 
+      dayObj.slots.forEach((slot) => {
+        // ONLINE slots
+        if (online_consultation === 1) {
+          slotRows.push({
+            doctorId,
+            day,
+            session_type: "online",
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            duration: slot_duration,
+            fees: online_fee || 0,
+          });
+        }
+ 
+     
+        if (clinic_consultation === 1) {
+          slotRows.push({
+            doctorId,
+            day,
+            session_type: "offline",
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            duration: slot_duration,
+            fees: clinic_fee || 0,
+          });
+        }
+      });
+    });
+ 
+    if (!slotRows.length) {
+      return Helper.response(false, "No slots to save", {}, res, 400);
+    }
+    //  console.log(slotRows,"slot row");
+     
+    // -------------------------------
+    // Bulk insert
+    // -------------------------------
+    await DoctorSlot.bulkCreate(slotRows, { transaction: t });
+    await t.commit();
+ 
+    return Helper.response(
+      true,
+      "Doctor availability saved successfully",
+      { total_slots: slotRows.length,step:'completed' },
+      res,
+      200
+    );
+  } catch (error) {
+    await t.rollback();
+    console.error("Doctor availability error:", error);
+    return Helper.response(false, error.message, {}, res, 500);
+  }
+};
+// exports.setDoctorAvailability = async (req, res) => {
+//   const t = await sequelize.transaction();
+//   try {
+//     const doctorId = req.users?.id; // from auth middleware
+
+//     if (!doctorId) {
+//       return Helper.response(false, "Doctor ID required", {}, res, 400);
+//     }
+
+//     const {
+//       slot_duration,
+//       online_consultation,
+//       online_fee,
+//       clinic_consultation,
+//       clinic_fee,
+//       availability,
+//     } = req.body;
+//      console.log(req.body);
+     
+//     if (!slot_duration || !Array.isArray(availability)) {
+//       return Helper.response(false, "slot duration and Availability Is required", {}, res, 400);
+//     }
+
+//     await Doctor.update(
+//       {
+//         duration: slot_duration,
+//         online_consultation_fees: online_fee || 0,
+//         clinic_consultation: clinic_consultation || 0,
+//         clinic_fee: clinic_fee || 0,
+//         online_consultation: online_consultation || 0,
+//       },
+//       { where: { id: doctorId }, transaction: t }
+//     );
+
+
+//     await DoctorSlot.destroy({
+//       where: { doctorId },
+//       transaction: t,
+//     });
+
+//     const slotRows = [];
+
+//     availability.forEach((dayObj) => {
+//       const day = dayObj.day?.toLowerCase();
+
+//       if (!Array.isArray(dayObj.slots)) return;
+
+//       dayObj.slots.forEach((slot) => {
+//         // ONLINE slots
+//         if (online_consultation === 1) {
+//           slotRows.push({
+//             doctorId,
+//             day,
+//             session_type: "online",
+//             start_time: slot.start_time,
+//             end_time: slot.end_time,
+//             duration: slot_duration,
+//             fees: online_fee || 0,
+//           });
+//         }
+
+     
+//         if (clinic_consultation === 1) {
+//           slotRows.push({
+//             doctorId,
+//             day,
+//             session_type: "offline",
+//             start_time: slot.start_time,
+//             end_time: slot.end_time,
+//             duration: slot_duration,
+//             fees: clinic_fee || 0,
+//           });
+//         }
+//       });
+//     });
+
+//     if (!slotRows.length) {
+//       return Helper.response(false, "No slots to save", {}, res, 400);
+//     }
+//     //  console.log(slotRows,"slot row");
+     
+//     // -------------------------------
+//     // Bulk insert
+//     // -------------------------------
+//     await DoctorSlot.bulkCreate(slotRows, { transaction: t });
+//     await t.commit();
+
+//     return Helper.response(
+//       true,
+//       "Doctor availability saved successfully",
+//       { total_slots: slotRows.length,step:'completed' },
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     await t.rollback();
+//     console.error("Doctor availability error:", error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
+
+
+
 exports.getallDoctorList = async (req, res) => {
   try {
+     const qualification=await Qualification.findAll({
+      raw:true,
+      order:[["id","desc"]],
+      attributes:["doctorId"]
+     })
+     let DoctorId=qualification.map((item)=>item.doctorId)
     const data = await Doctor.findAll({
       raw: true,
       order: [["id", "desc"]],
+      where:{
+        id:{
+          [Op.in]:DoctorId
+        }
+      }
     });
 
     if (data.length === 0) {
@@ -1941,12 +2568,56 @@ exports.getallDoctorList = async (req, res) => {
               if (item.speciality.startsWith("["))
                 specialityIds = JSON.parse(item.speciality);
               else
-                specialityIds = item.speciality.split(",").map((e) => +e.trim());
+                specialityIds = item.speciality
+                  .split(",")
+                  .map((e) => +e.trim());
             } else {
               specialityIds = [item.speciality];
             }
           } catch (err) {
             specialityIds = [];
+          }
+        }
+
+        let treatmentIds = [];
+
+        if (item.treatment_id) {
+          try {
+            if (Array.isArray(item.treatment_id)) {
+              treatmentIds = item.treatment_id;
+            } else if (typeof item.treatment_id === "string") {
+              // JSON string?
+              if (item.treatment_id.startsWith("["))
+                treatmentIds = JSON.parse(item.treatment_id);
+              else
+                treatmentIds = item.treatment_id
+                  .split(",")
+                  .map((e) => +e.trim());
+            } else {
+              treatmentIds = [item.treatment_id];
+            }
+          } catch (err) {
+            treatmentIds = [];
+          }
+        }
+
+        let DiseasesIds = [];
+
+        if (item.disease_id) {
+          try {
+            if (Array.isArray(item.disease_id)) {
+              DiseasesIds = item.disease_id;
+            } else if (typeof item.disease_id === "string") {
+              // JSON string?
+              if (item.disease_id.startsWith("["))
+                DiseasesIds = JSON.parse(item.disease_id);
+              else
+                DiseasesIds = item.disease_id.split(",").map((e) => +e.trim());
+            } else {
+              DiseasesIds = [item.disease_id];
+            }
+          } catch (err) {
+            DiseasesIds = [];
           }
         }
 
@@ -1967,6 +2638,34 @@ exports.getallDoctorList = async (req, res) => {
             ? await speclization.findAll({
                 where: {
                   id: { [Op.in]: specialityIds },
+                },
+                attributes: [
+                  ["id", "value"],
+                  ["name", "label"],
+                ],
+                raw: true,
+                order: [["id", "desc"]],
+              })
+            : [];
+        const DiseasesData =
+          DiseasesIds.length > 0
+            ? await Diseases.findAll({
+                where: {
+                  id: { [Op.in]: DiseasesIds },
+                },
+                attributes: [
+                  ["id", "value"],
+                  ["name", "label"],
+                ],
+                raw: true,
+                order: [["id", "desc"]],
+              })
+            : [];
+        const treatmentData =
+          treatmentIds.length > 0
+            ? await treatment_master.findAll({
+                where: {
+                  id: { [Op.in]: treatmentIds },
                 },
                 attributes: [
                   ["id", "value"],
@@ -2002,6 +2701,8 @@ exports.getallDoctorList = async (req, res) => {
           // Arrays
           qualification_data,
           speciality: specialityData,
+          treatment_id: treatmentData,
+          disease_id: DiseasesData,
           known_language: item.known_language
             ? Array.isArray(item.known_language)
               ? item.known_language
@@ -2033,7 +2734,6 @@ exports.getallDoctorList = async (req, res) => {
   }
 };
 
-
 // exports.getallDoctorList = async (req, res) => {
 //   try {
 //     const data = await Doctor.findAll({
@@ -2046,7 +2746,7 @@ exports.getallDoctorList = async (req, res) => {
 //       const finalData = await Promise.all(
 //         data.map(async (item) => {
 //           console.log(item.id,item.speciality);
-          
+
 //           const qualification_data =  item?.id ? await Qualification.findAll({
 //             where: {
 //               doctorId: item?.id,
@@ -2147,75 +2847,197 @@ exports.getallDoctorById = async (req, res) => {
     });
     if (data.length > 0) {
       const finalData = await Promise.all(
-        data.map(async (item) => {
-          // Fetch qualification list
+        data.map(async (doctor) => {
           const qualification_data = await Qualification.findAll({
-            where: { doctorId: item?.id },
+            where: { doctorId: doctor.id },
             raw: true,
           });
-          let state, district, speciality;
-          if (item.stateId) {
-            // Fetch state details
-            state = await State.findOne({
-              where: { pk_uniqueid: item.stateId },
-              attributes: [
-                ["pk_uniqueid", "value"],
-                ["state_name_en", "label"],
-              ],
-              raw: true,
-            });
-          }
-          if (item.cityId != "undefined") {
-            district = await District.findOne({
-              where: { pk_uniqueid: item?.cityId },
-              attributes: [
-                ["pk_uniqueid", "value"],
-                ["district_name_en", "label"],
-              ],
-              raw: true,
-            });
-          }
-          if (item.speciality) {
-            // Fetch specialization details
-            speciality = item?.speciality
-              ? await speclization.findOne({
-                  where: { id: item.speciality },
+
+          let experience_data = await Experience.findAll({
+            where: { doctorId: doctor.id },
+            raw: true,
+          });
+          // const treament_data = await treatment_master.findAll({
+          //   where: { id: doctor.treatment_id },
+          //     attributes: [
+          //           ["id", "value"],
+          //           ["name", "label"],
+          //         ],
+          //   raw: true,
+          // });
+
+       
+
+          experience_data = await Promise.all(
+            experience_data.map(async (exp) => {
+              let department_data = null;
+
+              if (exp.department_id) {
+                department_data = await department.findOne({
+                  where: { id: exp.department_id },
                   attributes: [
                     ["id", "value"],
                     ["name", "label"],
                   ],
-                  order: [["id", "desc"]],
+                  raw: true,
+                });
+              }
+
+              return {
+                ...exp,
+                department: department_data,
+              };
+            })
+          );
+
+          /* ================= State ================= */
+          const state = doctor.stateId
+            ? await State.findOne({
+                where: { pk_uniqueid: doctor.stateId },
+                attributes: [
+                  ["pk_uniqueid", "value"],
+                  ["state_name_en", "label"],
+                ],
+                raw: true,
+              })
+            : null;
+
+          /* ================= District ================= */
+          const district =
+            doctor.cityId && doctor.cityId !== null
+              ? await District.findOne({
+                  where: { pk_uniqueid: doctor.cityId },
+                  attributes: [
+                    ["pk_uniqueid", "value"],
+                    ["district_name_en", "label"],
+                  ],
                   raw: true,
                 })
               : null;
+
+          /* ================= Specialization ================= */
+          let specialization = [];
+          if (doctor.speciality) {
+            const specialityIds = Helper.parseIds(doctor.speciality);
+
+            specialization = await speclization.findAll({
+              where: {
+                id: { [Op.in]: specialityIds },
+              },
+              attributes: [
+                ["id", "value"],
+                ["name", "label"],
+              ],
+              order: [["id", "desc"]],
+              raw: true,
+            });
+          }
+            /* ================= Specialization ================= */
+          let treament_data = [];
+          if (doctor.treatment_id) {
+            const treatment_Ids = Helper.parseIds(doctor.treatment_id);
+
+            treament_data = await treatment_master.findAll({
+              where: {
+                id: { [Op.in]: treatment_Ids },
+              },
+              attributes: [
+                ["id", "value"],
+                ["name", "label"],
+              ],
+              order: [["id", "desc"]],
+              raw: true,
+            });
+          }
+          //    let disease_data = await Diseases.findAll({
+          //   where: { id: doctor.disease_id },
+          //  attributes: [
+          //           ["id", "value"],
+          //           ["name", "label"],
+          //         ],
+          //   raw: true,
+          // });
+            /* ================= Specialization ================= */
+          let disease_data = [];
+          if (doctor.disease_id) {
+            const disease_Ids = Helper.parseIds(doctor.disease_id);
+
+            disease_data = await Diseases.findAll({
+              where: {
+                id: { [Op.in]: disease_Ids },
+              },
+              attributes: [
+                ["id", "value"],
+                ["name", "label"],
+              ],
+              order: [["id", "desc"]],
+              raw: true,
+            });
           }
 
+
+          /* ================= Change Request ================= */
+          const changeRequested = await DoctorChangeRequest.findOne({
+            where: { doctor_id: doctor.id },
+            attributes: ["keys", "remark"],
+            raw: true,
+          });
+
+          /* ================= Final Response ================= */
           return {
-            ...item,
-            profile_image: item?.profileImage ?? null,
-            refferal_code: item?.refferalCode ?? null,
-            pin_code: item?.pinCode ?? null,
-            addhar_no: item?.addharNo ?? null,
-            university_name: item?.universityName ?? null,
-            registration_no: item?.registrationNo ?? null,
-            registration_date: item?.registrationDate ?? null,
-            father_name: item?.fatherName ?? null,
-            mother_name: item?.motherName ?? null,
-            pan_no: item?.panNo ?? null,
-            consultancy_charge: item?.consultancyCharge ?? null,
-            addhar_front_image: item?.addharFrontImage ?? null,
-            addhar_back_image: item?.addharBackImage ?? null,
-            text_consult: item?.textConsult ?? null,
-            phone_consult: item?.phoneConsult ?? null,
-            mobile: item?.phone ?? null,
+            ...doctor,
+
+            profile_image: doctor.profileImage ?? null,
+
+            referral_code:
+              doctor.refferalCode &&
+              doctor.refferalCode !== "null" &&
+              doctor.refferalCode !== "undefined"
+                ? doctor.refferalCode
+                : null,
+
+            pin_code: doctor.pinCode ?? null,
+            addhar_no: doctor.addharNo ?? null,
+            university_name: doctor.universityName ?? null,
+            registration_no: doctor.registrationNo ?? null,
+            registration_date: doctor.registrationDate ?? null,
+            father_name: doctor.fatherName ?? null,
+            mother_name: doctor.motherName ?? null,
+            pan_no: doctor.panNo ?? null,
+
+            consultancy_charge: doctor.consultancyCharge ?? null,
+
+            addhar_front_image: doctor.addharFrontImage ?? null,
+            addhar_back_image: doctor.addharBackImage ?? null,
+
+            text_consult: doctor.textConsult ?? null,
+            phone_consult: doctor.phoneConsult ?? null,
+
+            mobile: doctor.phone ?? null,
+
             qualification_data,
+            experience_data,
+            treatment_id:treament_data,
+            disease_id:disease_data,
+
             state,
             city: district,
-            specialization: speciality,
-            known_language: item?.known_language ? [item.known_language] : [],
-            cert_image: item?.cert_image ?? null,
-            start_time: item?.start_time ?? null,
-            end_time: item?.end_time ?? null,
+
+            specialization,
+
+            known_language: doctor.known_language
+              ? doctor.known_language.split(",")
+              : [],
+
+            cert_image: doctor.cert_image ?? null,
+
+            start_time: doctor.start_time ?? null,
+            end_time: doctor.end_time ?? null,
+
+            appointment_fees: doctor.appointmentCharge ?? 0,
+
+            keys: changeRequested?.keys ?? null,
+            remark: changeRequested?.remark ?? null,
           };
         })
       );
@@ -2424,6 +3246,10 @@ exports.updateDoctor = async (req, res) => {
       availability,
       status,
       is_feature,
+      disease_id,
+      treatment_id,
+      // consultancyCharge,
+      appointment_fees,
     } = req.body;
 
     const body = req.body;
@@ -2438,7 +3264,7 @@ exports.updateDoctor = async (req, res) => {
       return Helper.response(false, "Doctor not found", {}, res, 404);
     }
 
-    const duration = Helper.calculateDuration(start_time, end_time); // convert ms → minutes
+    const duration = Helper.calculateDuration(start_time, end_time);
     const updatedData = {
       refferalCode: referral_code ?? doctor?.referral_code,
       name: name ?? doctor?.name,
@@ -2465,6 +3291,10 @@ exports.updateDoctor = async (req, res) => {
       duration: duration ?? doctor?.duration,
       dob: dob ? new Date(dob) : doctor?.dob,
       status: status ?? doctor?.status,
+        disease_id: disease_id??doctor.disease_id,
+      treatment_id: treatment_id?? doctor.treatment_id,
+      // consultancyCharge: consultancyCharge ?consultancyCharge : doctor?.consultancyCharge,
+      appointmentCharge: appointment_fees ?? doctor?.appointmentCharge,
       profileImage: files?.profile_img
         ? path.basename(files.profile_img[0].path)
         : doctor.profileImage,
@@ -2576,6 +3406,45 @@ exports.updateDoctor = async (req, res) => {
       await Qualification.bulkCreate(qualifications, { transaction: t });
     }
 
+    const oldExperiences = await Experience.findAll({
+      where: { doctorId: id },
+      raw: true,
+      transaction: t,
+    });
+    const experiences = [];
+
+    let expIndex = 0;
+    while (body[`experiences[${expIndex}].organization`]) {
+      const organization = body[`experiences[${expIndex}].organization`];
+      const department_id = body[`experiences[${expIndex}].department_id`];
+      const from_date = body[`experiences[${expIndex}].from_date`];
+      const to_date = body[`experiences[${expIndex}].to_date`];
+      const is_current = body[`experiences[${expIndex}].is_current`] === "true";
+
+      experiences.push({
+        doctorId: id,
+        organization,
+        department_id: department_id || null,
+        from_date:
+          from_date && !isNaN(Date.parse(from_date))
+            ? new Date(from_date)
+            : null,
+        to_date:
+          to_date && !isNaN(Date.parse(to_date)) ? new Date(to_date) : null,
+        is_current,
+      });
+
+      expIndex++;
+    }
+    if (experiences.length > 0) {
+      await Experience.destroy({
+        where: { doctorId: id },
+        transaction: t,
+      });
+
+      await Experience.bulkCreate(experiences, { transaction: t });
+    }
+
     await t.commit();
 
     return Helper.response(
@@ -2635,7 +3504,6 @@ exports.addDoctorSlots = async (req, res) => {
     const doctor = await Doctor.findOne({
       where: {
         id: doctor_id,
-     
       },
     });
     if (!doctor) {
@@ -2643,8 +3511,7 @@ exports.addDoctorSlots = async (req, res) => {
     }
 
     await DoctorSlot.destroy({
-      where: { doctorId: doctor_id ,
-        session_type:type},
+      where: { doctorId: doctor_id, session_type: type },
       transaction: t,
     });
 
@@ -2695,6 +3562,375 @@ exports.addDoctorSlots = async (req, res) => {
   }
 };
 
+// exports.addClinic = async (req, res) => {
+//   const t = await sequelize.transaction();
+
+//   try {
+//     const { doctor_id } = req.body;
+
+//     if (!doctor_id) {
+//       return Helper.response(false, "Doctor ID is required", [], res, 400);
+//     }
+
+//     const doctor = await Doctor.findOne({ where: { id: doctor_id } });
+//     if (!doctor) {
+//       return Helper.response(false, "Invalid doctor ID", [], res, 404);
+//     }
+
+//     // Days list
+//     const days = [
+//       "monday",
+//       "tuesday",
+//       "wednesday",
+//       "thursday",
+//       "friday",
+//       "saturday",
+//       "sunday",
+//     ];
+
+//     // helper → extract uploaded file
+//     const getFile = (field) => {
+//       if (!req.files) return null;
+//       const file = req.files.find((f) => f.fieldname === field);
+//       return file ? file.filename : null;
+//     };
+
+//     const finalSlots = [];
+
+//     for (const day of days) {
+//       const slotKey = `slots.${day}.0.fees`; // check if day exists in payload
+
+//       if (req.body[slotKey] === undefined) continue; // ❗skip days not provided
+
+//       let index = 0;
+
+//       const slot_id = req.body[`slots.${day}.${index}.id`] || null;
+
+//       const clinic_name = req.body[`slots.${day}.${index}.clinic_name`] || null;
+//       const clinic_address =
+//         req.body[`slots.${day}.${index}.clinic_address`] ||
+//         req.body[`slots.${day}.${index}.full_address`] ||
+//         null;
+
+//       const fees = req.body[`slots.${day}.${index}.fees`] || 0;
+//       const emergency_fees =
+//         req.body[`slots.${day}.${index}.emergency_fees`] || 0;
+
+//       const pin_code = req.body[`slots.${day}.${index}.pin_code`] || null;
+//       const address = req.body[`slots.${day}.${index}.address`] || null;
+
+//       const img1 = getFile(`slots.${day}.${index}.image_url_1`);
+//       const img2 = getFile(`slots.${day}.${index}.image_url_2`);
+
+//       let slotRecord = null;
+
+//       if (slot_id) {
+//         // ********** UPDATE **********
+//         const clinicRecord = await clinic.findOne({
+//           where: { id: slot_id, doctorId: doctor_id },
+//           transaction: t,
+//         });
+
+//         if (!clinicRecord) {
+//           await t.rollback();
+//           return Helper.response(false, "Invalid Slot ID", [], res, 404);
+//         }
+
+//         slotRecord = await clinicRecord.update(
+//           {
+//             day,
+//             session_type: "offline",
+//             clinic_name,
+//             clinic_address,
+//             fees,
+//             emergency_fees,
+//             pin_code,
+//             address,
+//             clinic_image_1: img1 || clinicRecord.clinic_image_1,
+//             clinic_image_2: img2 || clinicRecord.clinic_image_2,
+//           },
+//           { transaction: t }
+//         );
+//       } else {
+//         // ********** CREATE **********
+//         slotRecord = await clinic.create(
+//           {
+//             doctorId: doctor_id,
+//             day,
+//             session_type: "offline",
+//             clinic_name,
+//             clinic_address,
+//             fees,
+//             emergency_fees,
+//             pin_code,
+//             address,
+//             clinic_image_1: img1,
+//             clinic_image_2: img2,
+//           },
+//           { transaction: t }
+//         );
+//       }
+
+//       finalSlots.push(slotRecord);
+//     }
+
+//     await t.commit();
+//     return Helper.response(
+//       true,
+//       "Clinic saved successfully",
+//       finalSlots,
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     console.error("Clinic Error:", error);
+//     await t.rollback();
+//     return Helper.response(false, error.message, [], res, 500);
+//   }
+// };
+
+// exports.addClinic = async (req, res) => {
+//   const transaction = await sequelize.transaction();
+//   try {
+//     const { doctor_id, type = "offline" } = req.body;
+
+//     if (!doctor_id) {
+//       return Helper.response(false, "doctor_id is required", [], res, 400);
+//     }
+
+//     if (type !== "offline") {
+//       return Helper.response(false, "Invalid session type", [], res, 400);
+//     }
+
+//     const getFile = (field) => {
+//       if (!req.files) return null;
+//       const file = req.files.find((f) => f.fieldname == field);
+//       return file ? file.filename : null;
+//     };
+
+//     // ----------------------------------
+//     // 1. Fetch existing clinics (ONCE)
+//     // ----------------------------------
+//     const existingClinics = await clinic.findAll({
+//       where: {
+//         doctorId: doctor_id,
+//         session_type: "offline",
+//       },
+//       attributes: ["id", "clinic_image_1", "clinic_image_2"],
+//       transaction,
+//       raw: true,
+//     });
+
+//     const existingClinicMap = {};
+//     existingClinics.forEach((c) => {
+//       existingClinicMap[c.id] = c;
+//     });
+
+//     const incomingSlotIds = [];
+//     const savedSlots = [];
+
+//     // ----------------------------------
+//     // 2. Loop through request slots
+//     // ----------------------------------
+//     let index = 0;
+//     while (true) {
+//       const prefix = `slots.${index}`;
+
+//       if (!req.body[`${prefix}.clinic_name`] && !req.body[`${prefix}.fees`])
+//         break;
+
+//       const slotId = req.body[`${prefix}.id`] || null;
+//       if (slotId) incomingSlotIds.push(Number(slotId));
+
+//       const existingSlot = slotId ? existingClinicMap[slotId] : null;
+
+//       const image1 = getFile(`${prefix}.image_url_1`);
+//       const image2 = getFile(`${prefix}.image_url_2`);
+
+//       const slotData = {
+//         doctorId: doctor_id,
+//         session_type: "offline",
+//         clinic_name: req.body[`${prefix}.clinic_name`] || null,
+//         clinic_address: req.body[`${prefix}.clinic_address`] || null,
+//         fees: req.body[`${prefix}.fees`] || null,
+//         emergency_fees: req.body[`${prefix}.emergency_fees`] || null,
+//         pin_code: req.body[`${prefix}.pin_code`] || null,
+//         time: req.body[`${prefix}.time`] || null,
+//         day: index,
+
+//         // image replace logic
+//         clinic_image_1: image1 || existingSlot?.clinic_image_1 || null,
+//         clinic_image_2: image2 || existingSlot?.clinic_image_2 || null,
+//       };
+
+//       let result;
+//       if (slotId) {
+//         // UPDATE
+//         await clinic.update(slotData, {
+//           where: { id: slotId },
+//           transaction,
+//         });
+//         result = { id: slotId, ...slotData };
+//       } else {
+//         // CREATE
+//         result = await clinic.create(slotData, { transaction });
+//       }
+
+//       savedSlots.push(result);
+//       index++;
+//     }
+
+//     // ----------------------------------
+//     // 3. DELETE removed clinics (SYNC)
+//     // ----------------------------------
+//     const existingIds = existingClinics.map((c) => c.id);
+
+//     const clinicsToDelete = existingIds.filter(
+//       (id) => !incomingSlotIds.includes(id)
+//     );
+
+//     if (clinicsToDelete.length > 0) {
+//       await clinic.destroy({
+//         where: { id: clinicsToDelete },
+//         transaction,
+//       });
+//     }
+
+//     await transaction.commit();
+
+//     return Helper.response(
+//       true,
+//       "Offline doctor slots saved successfully",
+//       { doctor_id, type, slots: savedSlots },
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     await transaction.rollback();
+//     console.error("Save offline slots error:", error);
+//     return Helper.response(
+//       false,
+//       error.message || "Failed to save slots",
+//       [],
+//       res,
+//       500
+//     );
+//   }
+// };
+
+
+exports.addClinic = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { doctor_id, type = "offline", sync = false } = req.body;
+
+    if (!doctor_id) {
+      return Helper.response(false, "doctor_id is required", [], res, 400);
+    }
+
+    if (type !== "offline") {
+      return Helper.response(false, "Invalid session type", [], res, 400);
+    }
+
+    // -------- FILE HANDLER ----------
+    const getFile = (field) => {
+      if (!req.files) return null;
+      const file = req.files.find(f => f.fieldname === field);
+      return file ? file.filename : null;
+    };
+
+    // -------- CREATE / UPDATE CLINIC ----------
+    const clinicData = {
+      doctorId: doctor_id,
+      session_type: "offline",
+      clinic_name: req.body["slots.monday.0.clinic_name"],
+      clinic_address: req.body["slots.monday.0.clinic_address"],
+      pin_code: req.body["slots.monday.0.pin_code"],
+      clinic_image_1: getFile("slots.monday.0.image_url_1"),
+      clinic_image_2: getFile("slots.monday.0.image_url_2"),
+      sync,
+    };
+
+    let clinicRecord = await clinic.findOne({
+      where: { doctorId: doctor_id, session_type: "offline" },
+      transaction,
+    });
+
+    if (clinicRecord) {
+      await clinicRecord.update(clinicData, { transaction });
+    } else {
+      clinicRecord = await clinic.create(clinicData, { transaction });
+    }
+
+    // -------- SLOT SAVE ----------
+    const days = [
+      "monday","tuesday","wednesday",
+      "thursday","friday","saturday","sunday"
+    ];
+
+    const savedSlots = [];
+
+    for (const day of days) {
+      let index = 0;
+
+      while (true) {
+        const base = `slots.${day}.${index}`;
+
+        if (!req.body[`${base}.start_time`]) break;
+
+        const slotData = {
+          doctorId: doctor_id,
+          clinicId: clinicRecord.id,
+          day,
+          session_type: "offline",
+          clinic_name: req.body[`${base}.clinic_name`],
+          clinic_address: req.body[`${base}.clinic_address`],
+          start_time: req.body[`${base}.start_time`],
+          end_time: req.body[`${base}.end_time`],
+          duration: req.body[`${base}.duration`],
+          fees: req.body[`${base}.fees`] || 0,
+          emergency_fees: req.body[`${base}.emergency_fees`],
+          pin_code: req.body[`${base}.pin_code`],
+          clinic_image_1: getFile(`${base}.image_url_1`) || clinicRecord.clinic_image_1,
+          clinic_image_2: getFile(`${base}.image_url_2`) || clinicRecord.clinic_image_2,
+          sync,
+        };
+
+        const slotId = req.body[`${base}.id`];
+
+        let slot;
+        if (slotId) {
+          await DoctorSlot.update(slotData, {
+            where: { id: slotId },
+            transaction,
+          });
+          slot = { id: slotId, ...slotData };
+        } else {
+          slot = await DoctorSlot.create(slotData, { transaction });
+        }
+
+        savedSlots.push(slot);
+        index++;
+      }
+    }
+
+    await transaction.commit();
+
+    return Helper.response(
+      true,
+      "Clinic & slots saved successfully",
+      { clinic: clinicRecord, slots: savedSlots },
+      res,
+      200
+    );
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Add clinic error:", error);
+    return Helper.response(false, error.message, [], res, 500);
+  }
+};
+
 exports.getDoctorSlot = async (req, res) => {
   try {
     const { doctor_id, type = "online", sync = false } = req.body;
@@ -2708,53 +3944,88 @@ exports.getDoctorSlot = async (req, res) => {
       return Helper.response(false, "Doctor not found", [], res, 404);
     }
 
-    const where = { doctorId: doctor_id };
-    if (type) where.session_type = type;
-
-    const slots = await DoctorSlot.findAll({
-      where,
-      order: [
-        ["day", "ASC"],
-        ["start_time", "ASC"],
-      ],
-      raw: true,
-    });
-
-    // Initialize grouped slots by weekday
-    const groupedSlots = {
-      monday: [],
-      tuesday: [],
-      wednesday: [],
-      thursday: [],
-      friday: [],
-      saturday: [],
-      sunday: [],
+    const where = {
+      doctorId: doctor_id,
+      session_type: type,
     };
 
-    for (const slot of slots) {
-      if (groupedSlots[slot.day]) {
-        groupedSlots[slot.day].push({
-          duration: slot.duration?.toString(),
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          fees: parseFloat(slot.fees).toFixed(2),
-          session_type: slot.session_type,
-          clinic_name: slot.clinic_name || null,
-          clinic_address: slot?.clinic_address || null,
-          clinic_image_1: slot?.clinic_image_1 || null,
-          clinic_image_2: slot?.clinic_image_2 || null,
-          emergency_fees: slot?.emergency_fees || null,
-          whatsApp: slot?.whatsApp || null,
-          pin_code: slot?.pin_code || null,
-          id: slot.id || null,
-        });
+    let slots;
+    let groupedSlots;
+
+    // ================= OFFLINE (FLAT LIST) =================
+    if (type === "offline") {
+
+      slots = await DoctorSlot.findAll({
+        where,
+        order: [["day", "ASC"]],
+        raw: true,
+      });
+
+      groupedSlots = slots.map((slot) => ({
+        id: slot.id,
+        day: slot.day,
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        duration: slot.duration?.toString(),
+        fees: parseFloat(slot.fees).toFixed(2),
+        emergency_fees: slot.emergency_fees,
+        session_type: slot.session_type,
+        clinic_name: slot.clinic_name || null,
+        clinic_address: slot.clinic_address || null,
+        clinic_image_1: slot.clinic_image_1 || null,
+        clinic_image_2: slot.clinic_image_2 || null,
+        whatsApp: slot.whatsApp || null,
+        pin_code: slot.pin_code || null,
+      })
+    )
+    }
+
+    // ================= ONLINE / OTHER (GROUPED BY DAY) =================
+    else {
+      slots = await DoctorSlot.findAll({
+        where,
+        order: [
+          ["day", "ASC"],
+          ["start_time", "ASC"],
+        ],
+        raw: true,
+      });
+
+      groupedSlots = {
+        monday: [],
+        tuesday: [],
+        wednesday: [],
+        thursday: [],
+        friday: [],
+        saturday: [],
+        sunday: [],
+      };
+
+      for (const slot of slots) {
+        if (groupedSlots[slot.day]) {
+          groupedSlots[slot.day].push({
+            id: slot.id,
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            duration: slot.duration?.toString(),
+            fees: parseFloat(slot.fees).toFixed(2),
+            emergency_fees: slot.emergency_fees,
+            session_type: slot.session_type,
+            clinic_name: slot.clinic_name || null,
+            clinic_address: slot.clinic_address || null,
+            clinic_image_1: slot.clinic_image_1 || null,
+            clinic_image_2: slot.clinic_image_2 || null,
+            whatsApp: slot.whatsApp || null,
+            pin_code: slot.pin_code || null,
+          });
+        }
       }
     }
 
     const responseData = {
       doctor_id,
       type,
-      sync, // added here
+      sync,
       slots: groupedSlots,
     };
 
@@ -2769,13 +4040,109 @@ exports.getDoctorSlot = async (req, res) => {
     console.error("Error fetching doctor slots:", error);
     return Helper.response(
       false,
-      error?.message || "Failed to fetch doctor slots",
+      error.message || "Failed to fetch doctor slots",
       [],
       res,
       500
     );
   }
 };
+
+
+
+// exports.getDoctorSlot = async (req, res) => {
+//   try {
+//     const { doctor_id, type = "online", sync = false } = req.body;
+
+//     if (!doctor_id) {
+//       return Helper.response(false, "doctor_id is required", [], res, 400);
+//     }
+
+//     const doctor = await Doctor.findByPk(doctor_id);
+//     if (!doctor) {
+//       return Helper.response(false, "Doctor not found", [], res, 404);
+//     }
+
+//     const where = { doctorId: doctor_id };
+//     if (type) where.session_type = type;
+//     let slots;
+//     let groupedSlots = {
+//       monday: [],
+//       tuesday: [],
+//       wednesday: [],
+//       thursday: [],
+//       friday: [],
+//       saturday: [],
+//       sunday: [],
+//     };
+//     if (type == "offline") {
+//       groupedSlots = [];
+//       slots = await clinic.findAll({
+//         where,
+//         order: [
+//           ["day", "ASC"],
+//           // ["start_time", "ASC"],
+//         ],
+//         raw: true,
+//       });
+//       groupedSlots = slots;
+//     } else {
+//       slots = await DoctorSlot.findAll({
+//         where,
+//         order: [
+//           ["day", "ASC"],
+//           ["start_time", "ASC"],
+//         ],
+//         raw: true,
+//       });
+//       // Initialize grouped slots by weekday
+
+//       for (const slot of slots) {
+//         if (groupedSlots[slot.day]) {
+//           groupedSlots[slot.day].push({
+//             duration: slot.duration?.toString(),
+//             start_time: slot.start_time,
+//             end_time: slot.end_time,
+//             fees: parseFloat(slot.fees).toFixed(2),
+//             session_type: slot.session_type,
+//             clinic_name: slot.clinic_name || null,
+//             clinic_address: slot?.clinic_address || null,
+//             clinic_image_1: slot?.clinic_image_1 || null,
+//             clinic_image_2: slot?.clinic_image_2 || null,
+//             emergency_fees: slot?.emergency_fees || null,
+//             whatsApp: slot?.whatsApp || null,
+//             pin_code: slot?.pin_code || null,
+//             id: slot.id || null,
+//           });
+//         }
+//       }
+//     }
+
+//     const responseData = {
+//       doctor_id,
+//       type,
+//       sync, // added here
+//       slots: groupedSlots,
+//     };
+
+//     return Helper.response(
+//       true,
+//       "Doctor slots fetched successfully",
+//       responseData,
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     console.error("Error fetching doctor slots:", error);
+//     return Helper.response(
+//       false,
+//       error?.message || "Failed to fetch doctor slots",
+//       [],
+//       res,
+//       500
+//     );
+//   }
+// };
 
 exports.updateDoctorSlots = async (req, res) => {
   try {
@@ -2831,7 +4198,7 @@ exports.addOfflineDoctorSlots = async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
-    const { doctor_id ,whatsApp} = req.body;
+    const { doctor_id, whatsApp } = req.body;
 
     if (!doctor_id) {
       return Helper.response(false, "Doctor ID is required", [], res, 400);
@@ -2842,7 +4209,15 @@ exports.addOfflineDoctorSlots = async (req, res) => {
       return Helper.response(false, "Invalid doctor ID", [], res, 404);
     }
 
-    const days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+    const days = [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
+    ];
 
     // Helper to extract uploaded file
     const getFile = (field) => {
@@ -2857,16 +4232,17 @@ exports.addOfflineDoctorSlots = async (req, res) => {
       let index = 0;
 
       while (req.body[`slots.${day}.${index}.start_time`] !== undefined) {
-
         const slot_id = req.body[`slots.${day}.${index}.id`];
 
-        const clinic_name = req.body[`slots.${day}.${index}.clinic_name`] || null;
+        const clinic_name =
+          req.body[`slots.${day}.${index}.clinic_name`] || null;
         const clinic_address =
           req.body[`slots.${day}.${index}.clinic_address`] ||
           req.body[`slots.${day}.${index}.full_address`] ||
           null;
 
-        const emergency_fees = req.body[`slots.${day}.${index}.emergency_fees`] || 0;
+        const emergency_fees =
+          req.body[`slots.${day}.${index}.emergency_fees`] || 0;
         const fees = req.body[`slots.${day}.${index}.fees`] || 0;
         const pin_code = req.body[`slots.${day}.${index}.pin_code`] || null;
         const address = req.body[`slots.${day}.${index}.address`] || null;
@@ -2878,7 +4254,10 @@ exports.addOfflineDoctorSlots = async (req, res) => {
         if (!duration || duration == 0) {
           duration =
             start_time && end_time
-              ? moment(end_time, "HH:mm").diff(moment(start_time, "HH:mm"), "minutes")
+              ? moment(end_time, "HH:mm").diff(
+                  moment(start_time, "HH:mm"),
+                  "minutes"
+                )
               : 0;
         }
 
@@ -2891,7 +4270,7 @@ exports.addOfflineDoctorSlots = async (req, res) => {
         if (slot_id) {
           // ----------- UPDATE -------------
           slotRecord = await DoctorSlot.findOne({
-            where: { id: slot_id, doctorId: doctor_id }
+            where: { id: slot_id, doctorId: doctor_id },
           });
 
           if (!slotRecord) {
@@ -2913,11 +4292,10 @@ exports.addOfflineDoctorSlots = async (req, res) => {
               clinic_image_1: new_img1 || slotRecord.clinic_image_1,
               clinic_image_2: new_img2 || slotRecord.clinic_image_2,
               address,
-              whatsApp:whatsApp
+              whatsApp: whatsApp,
             },
             { transaction: t }
           );
-
         } else {
           slotRecord = await DoctorSlot.create(
             {
@@ -2935,7 +4313,7 @@ exports.addOfflineDoctorSlots = async (req, res) => {
               clinic_image_1: new_img1,
               clinic_image_2: new_img2,
               address,
-              whatsApp:whatsApp
+              whatsApp: whatsApp,
             },
             { transaction: t }
           );
@@ -2947,16 +4325,19 @@ exports.addOfflineDoctorSlots = async (req, res) => {
     }
 
     await t.commit();
-    return Helper.response(true, "Offline doctor slots saved successfully", finalSlots, res, 200);
-
+    return Helper.response(
+      true,
+      "Offline doctor slots saved successfully",
+      finalSlots,
+      res,
+      200
+    );
   } catch (error) {
     console.error("Doctor Slot Error:", error);
     await t.rollback();
     return Helper.response(false, error.message, [], res, 500);
   }
 };
-
-
 
 // exports.addOfflineDoctorSlots = async (req, res) => {
 //   const t = await sequelize.transaction();
@@ -3043,7 +4424,6 @@ exports.addOfflineDoctorSlots = async (req, res) => {
 // //   ? image_url_2_file.filename
 // //   :  null;
 
-
 //         let slotRecord;
 // const image_url_1_file = req.files?.find(
 //   (f) => f.fieldname == `slots.${day}.${index}.image_url_1`
@@ -3053,8 +4433,6 @@ exports.addOfflineDoctorSlots = async (req, res) => {
 //   (f) => f.fieldname == `slots.${day}.${index}.image_url_2`
 // );
 
-
-
 // let clinic_image_1 = image_url_1_file
 //   ? image_url_1_file.filename
 //   : null;
@@ -3062,7 +4440,6 @@ exports.addOfflineDoctorSlots = async (req, res) => {
 // let clinic_image_2 = image_url_2_file
 //   ? image_url_2_file.filename
 //   : null;
-
 
 //         if (slot_id) {
 //           // UPDATE SLOT
@@ -3103,7 +4480,6 @@ exports.addOfflineDoctorSlots = async (req, res) => {
 //               { transaction: t }
 //             );
 //           }
-
 
 //         } else {
 //           // CREATE NEW SLOT
@@ -3159,13 +4535,74 @@ exports.getAllcitydd = async (req, res) => {
       order: [["createdAt", "DESC"]],
       raw: true,
     });
-    if (Units.length === 0) {
+    if (city.length === 0) {
       return Helper.response(false, "No City found", [], res, 404);
+    }
+    return Helper.response(true, "City fetched successfully", city, res, 200);
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching City",
+      res,
+      500
+    );
+  }
+};
+
+exports.adddepartment = async (req, res) => {
+  try {
+    const { name, status = true } = req.body;
+
+    if (!name) {
+      return Helper.response(false, "department is required", [], res, 400);
+    }
+    const existingdepartment = await department.findOne({ where: { name } });
+    if (existingdepartment) {
+      return Helper.response(
+        false,
+        "department name already exists",
+        [],
+        res,
+        409
+      );
+    }
+
+    const unit = await department.create({
+      name,
+      status,
+      createdBy: req.users.id,
+    });
+    return Helper.response(
+      true,
+      "department added successfully",
+      unit,
+      res,
+      201
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error adding department",
+      res,
+      500
+    );
+  }
+};
+exports.getAlldepartment = async (req, res) => {
+  try {
+    const Units = await department.findAll({
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No department found", [], res, 404);
     }
     return Helper.response(
       true,
-      "City fetched successfully",
-      City,
+      "department fetched successfully",
+      Units,
       res,
       200
     );
@@ -3173,7 +4610,304 @@ exports.getAllcitydd = async (req, res) => {
     return Helper.response(
       false,
       error.message,
-      "Error fetching City",
+      "Error fetching department",
+      res,
+      500
+    );
+  }
+};
+
+exports.getAlldepartmentDD = async (req, res) => {
+  try {
+    const Units = await department.findAll({
+      attributes: [
+        [col("id"), "value"],
+        [col("name"), "label"],
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No department found", [], res, 404);
+    }
+    return Helper.response(
+      true,
+      "department fetched successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching department",
+      res,
+      500
+    );
+  }
+};
+
+exports.updatedepartment = async (req, res) => {
+  try {
+    const { id, name, status } = req.body;
+    if (!id) {
+      return Helper.response(false, "ID is required", [], res, 400);
+    }
+    // if (!name) {
+    //   return Helper.response(false, "Salt name is required", [], res, 400);
+    // }
+
+    const Units = await department.findByPk(id);
+    if (!Units) {
+      return Helper.response(false, "department not found", [], res, 404);
+    }
+
+    Units.name = name || Units.name;
+    Units.status = status;
+    Units.updatedBy = req.users.id;
+    await Units.save();
+    return Helper.response(
+      true,
+      "department updated successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error updating department",
+      res,
+      500
+    );
+  }
+};
+
+exports.deletespeclization = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return Helper.response(false, "department ID is required", [], res, 400);
+    }
+    const category = await department.findByPk(id);
+    if (!category) {
+      return Helper.response(false, "department not found", [], res, 404);
+    }
+
+    await department.destroy();
+    return Helper.response(
+      true,
+      "department deleted successfully",
+      [],
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error deleting department",
+      res,
+      500
+    );
+  }
+};
+
+exports.addtreatment = async (req, res) => {
+  try {
+    const { name, status } = req.body;
+
+    if (!name) {
+      return Helper.response(false, "Salt is required", [], res, 400);
+    }
+    const existingProductType = await treatment_master.findOne({
+      where: { name },
+    });
+    if (existingProductType) {
+      return Helper.response(
+        false,
+        "treatment name already exists",
+        [],
+        res,
+        409
+      );
+    }
+
+    const unit = await treatment_master.create({
+      name,
+      status,
+      createdBy: req.users.id,
+    });
+    return Helper.response(true, "Salt added successfully", unit, res, 201);
+  } catch (error) {
+    return Helper.response(false, error.message, "Error adding Salt", res, 500);
+  }
+};
+
+exports.getAlltreatment = async (req, res) => {
+  try {
+    const Units = await treatment_master.findAll({
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No treatment found", [], res, 404);
+    }
+    return Helper.response(
+      true,
+      "treatment fetched successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching treatment",
+      res,
+      500
+    );
+  }
+};
+exports.getAlltreatmentDD = async (req, res) => {
+  try {
+    const Units = await treatment_master.findAll({
+      attributes: [
+        [col("id"), "value"],
+        [col("name"), "label"],
+      ],
+      // order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (Units.length === 0) {
+      return Helper.response(false, "No treatment found", [], res, 404);
+    }
+    return Helper.response(
+      true,
+      "treatment fetched successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching treatment_master",
+      res,
+      500
+    );
+  }
+};
+
+exports.updatetreatment_master = async (req, res) => {
+  try {
+    const { id, name, status } = req.body;
+    if (!id) {
+      return Helper.response(false, "ID is required", [], res, 400);
+    }
+    // if (!name) {
+    //   return Helper.response(false, "Salt name is required", [], res, 400);
+    // }
+
+    const Units = await treatment_master.findByPk(id);
+    if (!Units) {
+      return Helper.response(false, "treatment_master not found", [], res, 404);
+    }
+
+    Units.name = name || Units.name;
+    Units.status = status;
+    Units.updatedBy = req.users.id;
+    await Units.save();
+    return Helper.response(
+      true,
+      "treatment_master updated successfully",
+      Units,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error updating Unit",
+      res,
+      500
+    );
+  }
+};
+
+exports.deletetreatment = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return Helper.response(
+        false,
+        "treatment_master ID is required",
+        [],
+        res,
+        400
+      );
+    }
+    const category = await treatment_master.findByPk(id);
+    if (!category) {
+      return Helper.response(false, "treatment_master not found", [], res, 404);
+    }
+
+    await treatment_master.destroy({
+      where:{
+        id
+      }
+    });
+
+    return Helper.response(
+      true,
+      "treatment_master deleted successfully",
+      [],
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error deleting treatment_master",
+      res,
+      500
+    );
+  }
+};
+
+exports.getProductDD = async (req, res) => {
+  try {
+    const categories = await Product.findAll({
+      attributes: [
+        [col("id"), "value"],
+        [col("product_name"), "label"],
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    if (categories.length == 0) {
+      return Helper.response(false, "No Product found", [], res, 200);
+    }
+    return Helper.response(
+      true,
+      "Product fetched successfully",
+      categories,
+      res,
+      200
+    );
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching Product",
       res,
       500
     );

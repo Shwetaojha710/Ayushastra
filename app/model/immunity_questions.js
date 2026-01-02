@@ -13,19 +13,39 @@ const { duration } = require("moment/moment");
       allowNull: false,
       defaultValue: 'Immunity - Mind Body Type 2',
     },
-    question_text: {
+    question: {
       type: DataTypes.TEXT,
       allowNull: false,
     },
-    description: {
+    hint: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Extra context shown below the question',
     },
-    options: {
-      type: DataTypes.JSON,
-      allowNull: false,
-      defaultValue: ['Never', 'Rarely', 'Often', 'Always'],
+    OptionA: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      
+    },
+    OptionA: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      
+    },
+    OptionB: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      
+    },
+    OptionC: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      
+    },
+    OptionD: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      
     },
     order_no: {
       type: DataTypes.INTEGER,
