@@ -80,7 +80,10 @@ const {
   addDoctorProfessional,
   getProductDD,
   setDoctorAvailability,
-  ProductById
+  ProductById,
+  deleteClinic,
+  createPatientFromDoctor,
+  listTodayPatientsForDoctor
 } = require("../controller/admin/master.js");
 const upload = require("../middleware/upload.js");
 const { Admin, DoctorAdmin, publicRegisteredAdmin } = require("../middleware/auth.js");
@@ -275,6 +278,9 @@ router.post("/add-dr-professional",DoctorAdmin,upload.fields([
 router.post("/add-dr-slot",DoctorAdmin, setDoctorAvailability);
 router.post("/update-reg-user",Admin, updateRegisteredUser);
 router.post("/update-booking-status", updatebookingStatus);
+router.post('/delete-clinic',DoctorAdmin,deleteClinic)
+router.post('/create-patient-record',DoctorAdmin,createPatientFromDoctor)
+router.post('/list-doctor-patients',DoctorAdmin,listTodayPatientsForDoctor)
 // router.post("/add-dr-slot",DoctorAdmin, setDoctorAvailability);
 
 

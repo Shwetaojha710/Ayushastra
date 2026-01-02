@@ -86,10 +86,11 @@ exports.verifyOtp = async (req, res) => {
       first_name,
       last_name,
       type,
-      referred_by,
+      referral_code,
     } = req.body;
     const deviceId = req.headers?.deviceid;
 
+    
     if (!deviceId)
       return Helper.response(false, "Device Id is required", {}, res, 400);
 
@@ -204,38 +205,6 @@ exports.verifyOtp = async (req, res) => {
       }
     }
 
-    // if (type == "doctor") {
-    //   let regDoctor = await Doctor.findOne({ where: { phone: mobile } });
-
-    //   if (!regDoctor) {
-    //     return Helper.response(false, "No Doctor Found", {}, res, 400);
-    //   }
-
-    //   const token = jwt.sign({ id: regDoctor.id }, process.env.SECRET_KEY);
-
-    //   await regDoctor.update(
-    //     { token },
-    //     { transaction: t }
-    //   );
-
-    //   await t.commit();
-
-    //   return Helper.response(
-    //     true,
-    //     "OTP verified successfully",
-    //     {
-    //       id: regDoctor.id,
-    //       name: regDoctor.name,
-    //       mobile: regDoctor.phone,
-    //       email: regDoctor.email,
-    //       token,
-    //       type: "doctor",
-    //     },
-    //     res,
-    //     200
-    //   );
-    // }
-
     let regUser = await registered_user.findOne({
       where: { mobile, isDeleted: false },
     });
@@ -264,9 +233,11 @@ exports.verifyOtp = async (req, res) => {
       let referrerUser = null;
       let newUserBalance = newRegisterBonus;
 
-      if (referred_by) {
+      
+
+      if (referral_code) {
         referrerUser = await registered_user.findOne({
-          where: { referral_code: referred_by, isDeleted: false },
+          where: { referral_code: referral_code, isDeleted: false },
         });
 
         if (referrerUser) {
@@ -274,6 +245,7 @@ exports.verifyOtp = async (req, res) => {
         }
       }
 
+     
       // Create user
       regUser = await registered_user.create(
         {
@@ -329,9 +301,7 @@ exports.verifyOtp = async (req, res) => {
       }
     }
 
-    // -----------------------------------
-    // GENERATE TOKEN
-    // -----------------------------------
+   
     const token = jwt.sign({ id: regUser.id }, process.env.SECRET_KEY);
 
     await regUser.update(
@@ -339,9 +309,7 @@ exports.verifyOtp = async (req, res) => {
       { transaction: t }
     );
 
-    // -----------------------------------
-    // FETCH SAVED ADDRESSES
-    // -----------------------------------
+    
     const addressList = await Address.findAll({
       where: {
         user_id: regUser.id,

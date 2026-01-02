@@ -31,6 +31,7 @@ const DoctorChangeRequest = require("../../model/doctor_change_requests.js");
 const department = require("../../model/department.js");
 const Experience = require("../../model/experience.js");
 const treatment_master = require("../../model/treatment_master.js");
+const TodayPatient = require("../../model/today_patients.js");
 // product_gallery
 
 exports.addDiseases = async (req, res) => {
@@ -1207,13 +1208,13 @@ exports.getAllProducts = async (req, res) => {
 
 exports.ProductById = async (req, res) => {
   try {
-    const {id}=req.body
-    if(!id){
-      return Helper.response(false,"Id Is Required",{},res,200)
+    const { id } = req.body;
+    if (!id) {
+      return Helper.response(false, "Id Is Required", {}, res, 200);
     }
     const products = await Product.findAll({
-      where:{
-         id:id
+      where: {
+        id: id,
       },
       order: [["id", "ASC"]],
       raw: true,
@@ -1325,7 +1326,6 @@ exports.ProductById = async (req, res) => {
     );
   }
 };
-
 
 exports.getAllProductsDD = async (req, res) => {
   try {
@@ -1779,13 +1779,14 @@ exports.updatecoupon = async (req, res) => {
       return Helper.response(false, "Coupon not found", [], res, 404);
     }
 
-    coupon.coupon_name = coupon_name??coupon?.coupon_name;
-    coupon.product_id = product_id??coupon?.product_id;
-    (coupon.min_amount = min_amount??coupon?.min_amount), (coupon.max_discount = max_discount??coupon.max_discount);
+    coupon.coupon_name = coupon_name ?? coupon?.coupon_name;
+    coupon.product_id = product_id ?? coupon?.product_id;
+    (coupon.min_amount = min_amount ?? coupon?.min_amount),
+      (coupon.max_discount = max_discount ?? coupon.max_discount);
     coupon.start_time = start_time ?? coupon?.start_time;
     coupon.end_time = end_time ?? coupon?.end_time;
-    coupon.usage_per_user = usage_per_user  ?? coupon?.usage_per_user;
-    coupon.coupon_count = coupon_count  ?? coupon?.coupon_count;
+    coupon.usage_per_user = usage_per_user ?? coupon?.usage_per_user;
+    coupon.coupon_count = coupon_count ?? coupon?.coupon_count;
     coupon.status = status;
     coupon.description = description ?? coupon?.description;
     coupon.discount_type = discount_type ?? coupon?.discount_type;
@@ -2085,28 +2086,27 @@ exports.addDoctorPersonal = async (req, res) => {
       bio,
       // profileImage,
       loginId,
-
     } = req.body;
 
     if (!doctor_name || !mobile || !dob || !gender) {
       return Helper.response(false, "Required fields missing", {}, res, 400);
     }
 
-       
     let doctor = await Doctor.findOne({
       where: {
-        [Op.or]:{
-        phone: mobile,
-        email
-        }
-       },
+        [Op.or]: {
+          phone: mobile,
+          email,
+        },
+      },
       transaction: t,
     });
 
     // console.log(req.body,"body data111");
 
-    const age = moment().diff(moment(dob, "DD/MM/YYYY"), "years");
-   const files=req.files
+    const age = moment().diff(moment(dob, "YYYY-MM-DD"), "years");
+   
+    const files = req.files;
     let referredBy = null;
     if (referralCode) {
       const refDoctor = await Doctor.findOne({
@@ -2193,6 +2193,117 @@ exports.addDoctorPersonal = async (req, res) => {
   }
 };
 
+// exports.addDoctorProfessional = async (req, res) => {
+//   const t = await sequelize.transaction();
+//   try {
+//     const doctorId = req.users?.id || req.body.doctor_id;
+
+//     const {
+//       specializations = [],
+//       qualifications = [],
+//       experiences = [],
+//       medical_council_number,
+//       total_experince,
+//     } = req.body;
+
+//     if (!doctorId) {
+//       return Helper.response(false, "Doctor id is required", {}, res, 400);
+//     }
+//     const files = req.files;
+//     const doctor = await Doctor.findByPk(doctorId, { transaction: t });
+//     if (!doctor) {
+//       return Helper.response(false, "Doctor not found", {}, res, 404);
+//     }
+
+//     const certFile = files?.["council_certificate"]
+//       ? `${path.basename(files?.["council_certificate"].path)}`
+//       : null;
+
+//     await doctor.update(
+//       {
+//         speciality: Array.isArray(specializations)
+//           ? specializations.join(",")
+//           : doctor.speciality,
+//         registrationNo: medical_council_number || doctor.registrationNo,
+//         experience: total_experince ??  doctor.experience,
+//         is_profile: "completed",
+//         cert_image: certFile,
+//       },
+//       { transaction: t }
+//     );
+
+//     if (qualifications.length) {
+//       const qualificationExits = await Qualification.findOne({
+//         where: { doctorId: doctorId },
+//       });
+//       if (qualificationExits) {
+//         await Qualification.destroy({
+//           where: { doctorId: doctorId },
+//           transaction: t,
+//         });
+//       }
+
+//       const qualificationRows = qualifications.map((q) => ({
+//         doctorId: doctorId,
+//         degree: q.degree,
+//         university: q.institution,
+//          certificate: certFile,
+//         certificate_no: q.certificate_no,
+//         certificate_type: q.certificate_type,
+//         passing_year: q.year,
+//       }));
+
+//       await Qualification.bulkCreate(qualificationRows, {
+//         transaction: t,
+//       });
+//     }
+
+//     if (experiences.length) {
+//       const ExperienceExits = await Experience.findOne({
+//         where: { doctorId: doctorId },
+//       });
+//       if (ExperienceExits) {
+//         await Experience.destroy({
+//           where: { doctorId: doctorId },
+//           transaction: t,
+//         });
+//       }
+
+//       const experienceRows = experiences.map((e) => ({
+//         doctorId: doctorId,
+//         // position: e.position,
+//         organization: e.organization,
+//         from_date: e.start_date,
+//         department_id: e.department_id,
+//         to_date: e.end_date ? e.end_date : null,
+//         is_current: e.currently_working,
+//         status: true,
+//       }));
+
+//       await Experience.bulkCreate(experienceRows, {
+//         transaction: t,
+//       });
+//     }
+
+//     await t.commit();
+
+//     return Helper.response(
+//       true,
+//       "Doctor professional details saved successfully",
+//       {
+//         doctor_id: doctorId,
+//         step2_completed: true,
+//       },
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     await t.rollback();
+//     console.error(error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
+
 exports.addDoctorProfessional = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -2207,70 +2318,57 @@ exports.addDoctorProfessional = async (req, res) => {
     } = req.body;
 
     if (!doctorId) {
+      await t.rollback();
       return Helper.response(false, "Doctor id is required", {}, res, 400);
     }
+<<<<<<< Updated upstream
     const files = req.files;
+=======
+
+>>>>>>> Stashed changes
     const doctor = await Doctor.findByPk(doctorId, { transaction: t });
     if (!doctor) {
+      await t.rollback();
       return Helper.response(false, "Doctor not found", {}, res, 404);
     }
 
-    const certFile = files?.["council_certificate"]
-      ? `${path.basename(files?.["council_certificate"].path)}`
-      : null;
+    let certFile = null;
+    const files = req.files;
+
+    if (
+      files &&
+      files["council_certificate"] &&
+      Array.isArray(files["council_certificate"]) &&
+      files["council_certificate"].length > 0 &&
+      files["council_certificate"][0].path
+    ) {
+      certFile = path.basename(files["council_certificate"][0].path);
+    }
 
     await doctor.update(
       {
         speciality: Array.isArray(specializations)
           ? specializations.join(",")
           : doctor.speciality,
-        registrationNo: medical_council_number || doctor.registrationNo,
-        experience: total_experince ??  doctor.experience,
+        registrationNo: medical_council_number ?? doctor.registrationNo,
+        experience: total_experince ?? doctor.experience,
         is_profile: "completed",
-        cert_image: certFile,
+        cert_image: certFile ?? doctor.cert_image,
       },
       { transaction: t }
     );
-    // const qualifications = [];
-    // let index = 0;
 
-    // while (body[`qualifications[${index}].degree`]) {
-    //   const certFile = files[`qualifications[${index}].certificate`]
-    //     ? `${path.basename(
-    //         files[`qualifications[${index}].certificate`][0].path
-    //       )}`
-    //     : null;
-
-    //   qualifications.push({
-    //     doctorId: doctor.id,
-    //     degree: body[`qualifications[${index}].degree`],
-    //     passing_year: new Date(body[`qualifications[${index}].passing_year`]),
-    //     university: body[`qualifications[${index}].university`],
-    //     certificate_no: body[`qualifications[${index}].certificate_no`],
-    //     certificate: certFile,
-    //     certificate_type: body[`qualifications[${index}].certificate_type`],
-    //   });
-    //   index++;
-    // }
-    // if (qualifications.length > 0)
-    //   await Qualification.bulkCreate(qualifications);
-
-    if (qualifications.length) {
-      const qualificationExits = await Qualification.findOne({
-        where: { doctorId: doctorId },
+    if (Array.isArray(qualifications) && qualifications.length > 0) {
+      await Qualification.destroy({
+        where: { doctorId },
+        transaction: t,
       });
-      if (qualificationExits) {
-        await Qualification.destroy({
-          where: { doctorId: doctorId },
-          transaction: t,
-        });
-      }
-   
+
       const qualificationRows = qualifications.map((q) => ({
-        doctorId: doctorId,
+        doctorId,
         degree: q.degree,
         university: q.institution,
-         certificate: certFile,
+        certificate: certFile,
         certificate_no: q.certificate_no,
         certificate_type: q.certificate_type,
         passing_year: q.year,
@@ -2281,24 +2379,18 @@ exports.addDoctorProfessional = async (req, res) => {
       });
     }
 
-    if (experiences.length) {
-      const ExperienceExits = await Experience.findOne({
-        where: { doctorId: doctorId },
+    if (Array.isArray(experiences) && experiences.length > 0) {
+      await Experience.destroy({
+        where: { doctorId },
+        transaction: t,
       });
-      if (ExperienceExits) {
-        await Experience.destroy({
-          where: { doctorId: doctorId },
-          transaction: t,
-        });
-      }
 
       const experienceRows = experiences.map((e) => ({
-        doctorId: doctorId,
-        // position: e.position,
+        doctorId,
         organization: e.organization,
-        from_date: e.start_date,
         department_id: e.department_id,
-        to_date: e.end_date ? e.end_date : null,
+        from_date: e.start_date,
+        to_date: e.end_date || null,
         is_current: e.currently_working,
         status: true,
       }));
@@ -2312,7 +2404,7 @@ exports.addDoctorProfessional = async (req, res) => {
 
     return Helper.response(
       true,
-      "Doctor professional details saved successfully",
+      "Doctor professional details updated successfully",
       {
         doctor_id: doctorId,
         step2_completed: true,
@@ -2322,7 +2414,7 @@ exports.addDoctorProfessional = async (req, res) => {
     );
   } catch (error) {
     await t.rollback();
-    console.error(error);
+    console.error("addDoctorProfessional error:", error);
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
@@ -2331,11 +2423,11 @@ exports.setDoctorAvailability = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const doctorId = req.users?.id; // from auth middleware
- 
+
     if (!doctorId) {
       return Helper.response(false, "Doctor ID required", {}, res, 400);
     }
- 
+
     const {
       slot_duration,
       online_consultation,
@@ -2344,12 +2436,18 @@ exports.setDoctorAvailability = async (req, res) => {
       clinic_fee,
       availability,
     } = req.body;
-     console.log(req.body);
-     
+    console.log(req.body);
+
     if (!slot_duration || !Array.isArray(availability)) {
-      return Helper.response(false, "slot duration and Availability Is required", {}, res, 400);
+      return Helper.response(
+        false,
+        "slot duration and Availability Is required",
+        {},
+        res,
+        400
+      );
     }
- 
+
     await Doctor.update(
       {
         duration: slot_duration,
@@ -2360,20 +2458,19 @@ exports.setDoctorAvailability = async (req, res) => {
       },
       { where: { id: doctorId }, transaction: t }
     );
- 
- 
+
     await DoctorSlot.destroy({
-      where: { doctorId,session_type: { [Op.in]: ["online"] } },
+      where: { doctorId, session_type: { [Op.in]: ["online"] } },
       transaction: t,
     });
- 
+
     const slotRows = [];
- 
+
     availability.forEach((dayObj) => {
       const day = dayObj.day?.toLowerCase();
- 
+
       if (!Array.isArray(dayObj.slots)) return;
- 
+
       dayObj.slots.forEach((slot) => {
         // ONLINE slots
         if (online_consultation === 1) {
@@ -2387,8 +2484,7 @@ exports.setDoctorAvailability = async (req, res) => {
             fees: online_fee || 0,
           });
         }
- 
-     
+
         if (clinic_consultation === 1) {
           slotRows.push({
             doctorId,
@@ -2402,22 +2498,22 @@ exports.setDoctorAvailability = async (req, res) => {
         }
       });
     });
- 
+
     if (!slotRows.length) {
       return Helper.response(false, "No slots to save", {}, res, 400);
     }
     //  console.log(slotRows,"slot row");
-     
+
     // -------------------------------
     // Bulk insert
     // -------------------------------
     await DoctorSlot.bulkCreate(slotRows, { transaction: t });
     await t.commit();
- 
+
     return Helper.response(
       true,
       "Doctor availability saved successfully",
-      { total_slots: slotRows.length,step:'completed' },
+      { total_slots: slotRows.length, step: "completed" },
       res,
       200
     );
@@ -2445,7 +2541,7 @@ exports.setDoctorAvailability = async (req, res) => {
 //       availability,
 //     } = req.body;
 //      console.log(req.body);
-     
+
 //     if (!slot_duration || !Array.isArray(availability)) {
 //       return Helper.response(false, "slot duration and Availability Is required", {}, res, 400);
 //     }
@@ -2460,7 +2556,6 @@ exports.setDoctorAvailability = async (req, res) => {
 //       },
 //       { where: { id: doctorId }, transaction: t }
 //     );
-
 
 //     await DoctorSlot.destroy({
 //       where: { doctorId },
@@ -2488,7 +2583,6 @@ exports.setDoctorAvailability = async (req, res) => {
 //           });
 //         }
 
-     
 //         if (clinic_consultation === 1) {
 //           slotRows.push({
 //             doctorId,
@@ -2507,7 +2601,7 @@ exports.setDoctorAvailability = async (req, res) => {
 //       return Helper.response(false, "No slots to save", {}, res, 400);
 //     }
 //     //  console.log(slotRows,"slot row");
-     
+
 //     // -------------------------------
 //     // Bulk insert
 //     // -------------------------------
@@ -2528,24 +2622,22 @@ exports.setDoctorAvailability = async (req, res) => {
 //   }
 // };
 
-
-
 exports.getallDoctorList = async (req, res) => {
   try {
-     const qualification=await Qualification.findAll({
-      raw:true,
-      order:[["id","desc"]],
-      attributes:["doctorId"]
-     })
-     let DoctorId=qualification.map((item)=>item.doctorId)
+    const qualification = await Qualification.findAll({
+      raw: true,
+      order: [["id", "desc"]],
+      attributes: ["doctorId"],
+    });
+    let DoctorId = qualification.map((item) => item.doctorId);
     const data = await Doctor.findAll({
       raw: true,
       order: [["id", "desc"]],
-      where:{
-        id:{
-          [Op.in]:DoctorId
-        }
-      }
+      where: {
+        id: {
+          [Op.in]: DoctorId,
+        },
+      },
     });
 
     if (data.length === 0) {
@@ -2866,8 +2958,6 @@ exports.getallDoctorById = async (req, res) => {
           //   raw: true,
           // });
 
-       
-
           experience_data = await Promise.all(
             experience_data.map(async (exp) => {
               let department_data = null;
@@ -2932,7 +3022,7 @@ exports.getallDoctorById = async (req, res) => {
               raw: true,
             });
           }
-            /* ================= Specialization ================= */
+          /* ================= Specialization ================= */
           let treament_data = [];
           if (doctor.treatment_id) {
             const treatment_Ids = Helper.parseIds(doctor.treatment_id);
@@ -2957,7 +3047,7 @@ exports.getallDoctorById = async (req, res) => {
           //         ],
           //   raw: true,
           // });
-            /* ================= Specialization ================= */
+          /* ================= Specialization ================= */
           let disease_data = [];
           if (doctor.disease_id) {
             const disease_Ids = Helper.parseIds(doctor.disease_id);
@@ -2974,7 +3064,6 @@ exports.getallDoctorById = async (req, res) => {
               raw: true,
             });
           }
-
 
           /* ================= Change Request ================= */
           const changeRequested = await DoctorChangeRequest.findOne({
@@ -3017,8 +3106,8 @@ exports.getallDoctorById = async (req, res) => {
 
             qualification_data,
             experience_data,
-            treatment_id:treament_data,
-            disease_id:disease_data,
+            treatment_id: treament_data,
+            disease_id: disease_data,
 
             state,
             city: district,
@@ -3291,8 +3380,8 @@ exports.updateDoctor = async (req, res) => {
       duration: duration ?? doctor?.duration,
       dob: dob ? new Date(dob) : doctor?.dob,
       status: status ?? doctor?.status,
-        disease_id: disease_id??doctor.disease_id,
-      treatment_id: treatment_id?? doctor.treatment_id,
+      disease_id: disease_id ?? doctor.disease_id,
+      treatment_id: treatment_id ?? doctor.treatment_id,
       // consultancyCharge: consultancyCharge ?consultancyCharge : doctor?.consultancyCharge,
       appointmentCharge: appointment_fees ?? doctor?.appointmentCharge,
       profileImage: files?.profile_img
@@ -3818,7 +3907,6 @@ exports.addDoctorSlots = async (req, res) => {
 //   }
 // };
 
-
 exports.addClinic = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -3835,7 +3923,7 @@ exports.addClinic = async (req, res) => {
     // -------- FILE HANDLER ----------
     const getFile = (field) => {
       if (!req.files) return null;
-      const file = req.files.find(f => f.fieldname === field);
+      const file = req.files.find((f) => f.fieldname === field);
       return file ? file.filename : null;
     };
 
@@ -3864,8 +3952,13 @@ exports.addClinic = async (req, res) => {
 
     // -------- SLOT SAVE ----------
     const days = [
-      "monday","tuesday","wednesday",
-      "thursday","friday","saturday","sunday"
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
     ];
 
     const savedSlots = [];
@@ -3891,8 +3984,10 @@ exports.addClinic = async (req, res) => {
           fees: req.body[`${base}.fees`] || 0,
           emergency_fees: req.body[`${base}.emergency_fees`],
           pin_code: req.body[`${base}.pin_code`],
-          clinic_image_1: getFile(`${base}.image_url_1`) || clinicRecord.clinic_image_1,
-          clinic_image_2: getFile(`${base}.image_url_2`) || clinicRecord.clinic_image_2,
+          clinic_image_1:
+            getFile(`${base}.image_url_1`) || clinicRecord.clinic_image_1,
+          clinic_image_2:
+            getFile(`${base}.image_url_2`) || clinicRecord.clinic_image_2,
           sync,
         };
 
@@ -3923,7 +4018,6 @@ exports.addClinic = async (req, res) => {
       res,
       200
     );
-
   } catch (error) {
     await transaction.rollback();
     console.error("Add clinic error:", error);
@@ -3954,7 +4048,6 @@ exports.getDoctorSlot = async (req, res) => {
 
     // ================= OFFLINE (FLAT LIST) =================
     if (type === "offline") {
-
       slots = await DoctorSlot.findAll({
         where,
         order: [["day", "ASC"]],
@@ -3976,8 +4069,7 @@ exports.getDoctorSlot = async (req, res) => {
         clinic_image_2: slot.clinic_image_2 || null,
         whatsApp: slot.whatsApp || null,
         pin_code: slot.pin_code || null,
-      })
-    )
+      }));
     }
 
     // ================= ONLINE / OTHER (GROUPED BY DAY) =================
@@ -4047,8 +4139,6 @@ exports.getDoctorSlot = async (req, res) => {
     );
   }
 };
-
-
 
 // exports.getDoctorSlot = async (req, res) => {
 //   try {
@@ -4860,9 +4950,9 @@ exports.deletetreatment = async (req, res) => {
     }
 
     await treatment_master.destroy({
-      where:{
-        id
-      }
+      where: {
+        id,
+      },
     });
 
     return Helper.response(
@@ -4908,6 +4998,145 @@ exports.getProductDD = async (req, res) => {
       false,
       error.message,
       "Error fetching Product",
+      res,
+      500
+    );
+  }
+};
+
+exports.deleteClinic = async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) {
+      return Helper.response(false, "Clinic ID is required", [], res, 400);
+    }
+    const deleteClinic = await clinic.findByPk(id);
+    if (!deleteClinic) {
+      return Helper.response(false, "Clinic not found", [], res, 404);
+    }
+    await clinic.destroy({
+      where: { id },
+    });
+    return Helper.response(true, "Clinic deleted successfully", [], res, 200);
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error deleting Clinic",
+      res,
+      500
+    );
+  }
+};
+exports.createPatientFromDoctor = async (req, res) => {
+  try {
+    const { mobile, name, gender, age } = req.body;
+    const doctorId = req.users?.id;
+    if (!doctorId) {
+      return Helper.response(false, "Doctor not authenticated", {}, res, 401);
+    }
+
+    const checkMobile = await registered_user.count({ where: { mobile } });
+    if (checkMobile === 0) {
+      if (!name || typeof name !== "string") {
+        return { first_name: "", last_name: "" };
+      }
+
+      const parts = name.trim().replace(/\s+/g, " ").split(" ");
+      const createUser = await registered_user.create({
+        first_name: parts[0] || "",
+        last_name: parts.length > 1 ? parts.slice(1).join(" ") : "",
+        mobile,
+        gender,
+      });
+      if (createUser) {
+        const createRecord = await TodayPatient.create({
+          name,
+          doctor_id: doctorId,
+          mobile,
+          gender,
+          age,
+          is_prescription_added: false,
+          visit_date: moment().format("YYYY-MM-DD"),
+          user_id: createUser.id,
+        });
+        if (createRecord) {
+          return Helper.response(
+            true,
+            "Patient created successfully",
+            createRecord,
+            res,
+            201
+          );
+        }
+      }
+    } else {
+      const checkMobile = await registered_user.count({ where: { mobile } });
+      if (checkMobile > 0) {
+        const existingUser = await registered_user.findOne({ where: { mobile } });
+        const createRecord = await TodayPatient.create({
+          name,
+          doctor_id: doctorId,
+          mobile,
+          gender,
+          age,
+          is_prescription_added: false,
+          visit_date: moment().format("YYYY-MM-DD"),
+          user_id: existingUser.id,
+        });
+        if (createRecord) {
+          return Helper.response(
+            true,
+            "Patient created successfully",
+            createRecord,
+            res,
+            201
+          );
+        }
+      }
+    }
+  } catch (error) {
+    return Helper.response(
+      false,
+      error.message,
+      "Error creating Patient",
+      res,
+      500
+    );
+  }
+};
+
+exports.listTodayPatientsForDoctor = async (req, res) => {
+  try {
+    const doctorId = req.users?.id;
+
+    if (!doctorId) {
+      return Helper.response(false, "Doctor not authenticated", {}, res, 401);
+    }
+
+    const today = moment().format("YYYY-MM-DD");
+
+    const patients = await TodayPatient.findAll({
+      where: {
+        doctor_id: doctorId,
+        visit_date: today,
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    return Helper.response(
+      true,
+      "Today's patient list fetched successfully",
+      patients,
+      res,
+      200
+    );
+  } catch (error) {
+    console.error("listTodayPatientsForDoctor:", error);
+    return Helper.response(
+      false,
+      error.message,
+      "Error fetching patient list",
       res,
       500
     );

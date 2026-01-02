@@ -9,6 +9,8 @@ const { Op } = require("sequelize");
 const prescriptions = require("../../model/prescription");
 const Clinic = require("../../model/clinic");
 const DoctorSlot = require("../../model/doctor_slots");
+const registered_user = require("../../model/registeredusers");
+const prescription_medicines = require("../../model/prescription_medicines");
 // const clinic = require("../../model/clinic");
 
 // exports.addDoctor=async(req,res)=>{
