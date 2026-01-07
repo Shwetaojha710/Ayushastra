@@ -54,7 +54,7 @@ exports.getPublicBanner = async (req, res) => {
 };
 exports.getPublicproduct = async (req, res) => {
   try {
-    let { categories, diseases, ingredients, price_range, search } = req.body;
+    let { categories, diseases, ingredients, price_range, search,brand } = req.body;
 
     const deviceId = req?.headers?.deviceid;
     const token = req.headers["authorization"]?.split(" ")[1];
@@ -100,6 +100,9 @@ exports.getPublicproduct = async (req, res) => {
     // handle category filter
     if (categories && categories.length > 0) {
       whereCondition.category_id = { [Op.in]: categories };
+    }
+    if (brand&& brand.length > 0) {
+      whereCondition.brand_id = { [Op.in]: brand };
     }
     if (price_range && price_range.length > 0) {
       whereCondition.offer_price = { [Op.between]: price_range };

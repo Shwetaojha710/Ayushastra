@@ -18,6 +18,7 @@ const UserMonthPoints = require("../../model/user_month_points");
 const Doctor = require("../../model/doctor");
 const Qualification = require("../../model/qualification");
 const DoctorSlot = require("../../model/doctor_slots");
+const { applyReferralLogic } = require("../../helper/referralLogic");
 
 exports.sendOtp = async (req, res) => {
   try {
@@ -86,195 +87,103 @@ exports.verifyOtp = async (req, res) => {
       first_name,
       last_name,
       type,
-      referred_by,
+      referral_code, // referral entered during login
     } = req.body;
+
     const deviceId = req.headers?.deviceid;
 
-    if (!deviceId)
+    /* ---------------- VALIDATION ---------------- */
+    if (!deviceId) {
+      await t.rollback();
       return Helper.response(false, "Device Id is required", {}, res, 400);
+    }
 
-    if (!mobile || !otp)
+    if (!mobile || !otp) {
+      await t.rollback();
       return Helper.response(false, "Mobile and OTP required", {}, res, 200);
+    }
 
+    /* ---------------- OTP VERIFY ---------------- */
     const otpRecord = await Otp.findOne({
       where: { mobile, otp, status: true },
     });
 
-    if (!otpRecord) return Helper.response(false, "Invalid OTP", {}, res, 200);
+    if (!otpRecord) {
+      await t.rollback();
+      return Helper.response(false, "Invalid OTP", {}, res, 200);
+    }
 
-    if (new Date() > new Date(otpRecord.expiry_time))
+    if (new Date() > new Date(otpRecord.expiry_time)) {
+      await t.rollback();
       return Helper.response(false, "OTP expired", {}, res, 200);
+    }
 
     await Otp.update({ status: false }, { where: { mobile, otp } });
 
-    if (type == "doctor") {
-      let regDoctor = await Doctor.findOne({
-        where: {
-          phone: mobile,
-        },
-      });
+    /* ================= DOCTOR FLOW ================= */
+    if (type === "doctor") {
+      let regDoctor = await Doctor.findOne({ where: { phone: mobile } });
       let token;
+
       if (!regDoctor) {
-        let findDoctor = await Doctor.create(
-          {
-            token,
-            phone: mobile,
-          },
-          { transaction: t }
-        );
-
-        token = jwt.sign({ id: findDoctor.id }, process.env.SECRET_KEY);
-        // await regDoctor.update({ token }, { transaction: t });
-        await findDoctor.update({ token }, { transaction: t });
-
-        await t.commit();
-
-        return Helper.response(
-          true,
-          "Data Found",
-          { step: "step1", token },
-          res,
-          200
-        );
+        regDoctor = await Doctor.create({ phone: mobile }, { transaction: t });
       }
 
       token = jwt.sign({ id: regDoctor.id }, process.env.SECRET_KEY);
-
       await regDoctor.update({ token }, { transaction: t });
 
       await t.commit();
+
       const drExp = await Qualification.count({
-        where: {
-          doctorId: regDoctor?.id,
-        },
+        where: { doctorId: regDoctor.id },
       });
-      const drslot = await DoctorSlot.count({
-        where: {
-          doctorId: regDoctor?.id,
-        },
+      const drSlot = await DoctorSlot.count({
+        where: { doctorId: regDoctor.id },
       });
-      if (drslot) {
-        return Helper.response(
-          true,
-          "OTP verified successfully",
-          {
-            id: regDoctor.id,
-            name: regDoctor.name,
-            mobile: regDoctor.phone,
-            email: regDoctor.email,
-            token,
-            step: "completed",
-            type: "doctor",
-          },
-          res,
-          200
-        );
-      } else if (drExp) {
-        return Helper.response(
-          true,
-          "OTP verified successfully",
-          {
-            id: regDoctor.id,
-            name: regDoctor.name,
-            mobile: regDoctor.phone,
-            email: regDoctor.email,
-            token,
-            step: "step3",
-            type: "doctor",
-          },
-          res,
-          200
-        );
-      } else {
-        return Helper.response(
-          true,
-          "OTP verified successfully",
-          {
-            id: regDoctor.id,
-            name: regDoctor.name,
-            mobile: regDoctor.phone,
-            email: regDoctor.email,
-            token,
-            step: "step2",
-            type: "doctor",
-          },
-          res,
-          200
-        );
-      }
+
+      let step = "step1";
+      if(regDoctor?.name) step ="step2"
+      if (drSlot) step = "completed";
+      // else if (drExp) step = "step3";
+
+      return Helper.response(
+        true,
+        "OTP verified successfully",
+        {
+          name:regDoctor.name ? `Dr ${regDoctor.name}` : 'Doctor',
+          id: regDoctor.id,
+          mobile: regDoctor.phone,
+          email: regDoctor.email,
+          token,
+          step,
+          type: "doctor",
+        },
+        res,
+        200
+      );
     }
 
-    // if (type == "doctor") {
-    //   let regDoctor = await Doctor.findOne({ where: { phone: mobile } });
-
-    //   if (!regDoctor) {
-    //     return Helper.response(false, "No Doctor Found", {}, res, 400);
-    //   }
-
-    //   const token = jwt.sign({ id: regDoctor.id }, process.env.SECRET_KEY);
-
-    //   await regDoctor.update(
-    //     { token },
-    //     { transaction: t }
-    //   );
-
-    //   await t.commit();
-
-    //   return Helper.response(
-    //     true,
-    //     "OTP verified successfully",
-    //     {
-    //       id: regDoctor.id,
-    //       name: regDoctor.name,
-    //       mobile: regDoctor.phone,
-    //       email: regDoctor.email,
-    //       token,
-    //       type: "doctor",
-    //     },
-    //     res,
-    //     200
-    //   );
-    // }
-
+    /* ================= USER FLOW ================= */
     let regUser = await registered_user.findOne({
       where: { mobile, isDeleted: false },
     });
 
     let isNewUser = false;
 
+    /* -------- NEW USER -------- */
     if (!regUser) {
       isNewUser = true;
 
-      let referralCode = Helper.generateReferralCode(first_name || "USR");
-      let exists = await registered_user.findOne({
-        where: { referral_code: referralCode },
+      // Generate unique referral code for new user
+      let userReferralCode = Helper.generateReferralCode(first_name || "USR");
+      const exists = await registered_user.findOne({
+        where: { referral_code: userReferralCode },
       });
-      if (exists)
-        referralCode = Helper.generateReferralCode(first_name || "USR");
-
-      const referralMaster = await referral_master.findOne({
-        order: [["createdAt", "desc"]],
-        transaction: t,
-      });
-
-      const newRegisterBonus = Number(referralMaster?.new_register || 500);
-      const refereeBonus = Number(referralMaster?.referee_bonus || 250);
-      const referrerBonus = Number(referralMaster?.referrer_bonus || 250);
-
-      let referrerUser = null;
-      let newUserBalance = newRegisterBonus;
-
-      if (referred_by) {
-        referrerUser = await registered_user.findOne({
-          where: { referral_code: referred_by, isDeleted: false },
-        });
-
-        if (referrerUser) {
-          newUserBalance = newRegisterBonus + refereeBonus;
-        }
+      if (exists) {
+        userReferralCode = Helper.generateReferralCode(first_name || "USR");
       }
 
-      // Create user
+      // CREATE USER FIRST
       regUser = await registered_user.create(
         {
           mobile,
@@ -286,52 +195,21 @@ exports.verifyOtp = async (req, res) => {
           isDeleted: false,
           device_id: deviceId,
           type: type || "normal",
-          referral_code: referralCode,
-          referred_by: referrerUser?.id || null,
-          ayucash_balance: newUserBalance,
+          referral_code: userReferralCode,
+          ayucash_balance: 0, // updated by referral logic
         },
         { transaction: t }
       );
 
-      const month = Helper.getCurrentMonth().split("-")[1];
-      const year = Helper.getCurrentMonth().split("-")[0];
-
-      if (referrerUser) {
-        await UserMonthPoints.create(
-          {
-            parent_id: referrerUser.id,
-            child_id: regUser.id,
-            month,
-            year,
-            ayu_points: refereeBonus,
-          },
-          { transaction: t }
-        );
-
-        await registered_user.update(
-          {
-            ayucash_balance:
-              (referrerUser.ayucash_balance || 0) + referrerBonus,
-          },
-          { where: { id: referrerUser.id }, transaction: t }
-        );
-      } else {
-        await UserMonthPoints.create(
-          {
-            parent_id: regUser.id,
-            child_id: null,
-            month,
-            year,
-            ayu_points: newRegisterBonus,
-          },
-          { transaction: t }
-        );
-      }
+      // 🔁 APPLY SAME REFERRAL LOGIC AS REGISTRATION
+      await applyReferralLogic({
+        newUser: regUser,
+        referralCode: referral_code,
+        transaction: t,
+      });
     }
 
-    // -----------------------------------
-    // GENERATE TOKEN
-    // -----------------------------------
+    /* -------- TOKEN UPDATE (NEW + EXISTING) -------- */
     const token = jwt.sign({ id: regUser.id }, process.env.SECRET_KEY);
 
     await regUser.update(
@@ -339,29 +217,18 @@ exports.verifyOtp = async (req, res) => {
       { transaction: t }
     );
 
-    // -----------------------------------
-    // FETCH SAVED ADDRESSES
-    // -----------------------------------
+    /* -------- FETCH ADDRESSES -------- */
     const addressList = await Address.findAll({
-      where: {
-        user_id: regUser.id,
-        isSaved: true,
-      },
+      where: { user_id: regUser.id, isSaved: true },
       raw: true,
     });
 
     const groupedAddresses = [];
-
     addressList.forEach((address) => {
-      const idx = groupedAddresses.length - 1;
-
-      if (
-        groupedAddresses.length > 0 &&
-        (!groupedAddresses[idx].billing || !groupedAddresses[idx].shipping)
-      ) {
-        if (address.type === "billing") groupedAddresses[idx].billing = address;
-        if (address.type === "shipping")
-          groupedAddresses[idx].shipping = address;
+      const last = groupedAddresses[groupedAddresses.length - 1];
+      if (last && (!last.billing || !last.shipping)) {
+        if (address.type === "billing") last.billing = address;
+        if (address.type === "shipping") last.shipping = address;
       } else {
         groupedAddresses.push({
           billing: address.type === "billing" ? address : null,
@@ -372,6 +239,7 @@ exports.verifyOtp = async (req, res) => {
 
     await t.commit();
 
+    /* ---------------- RESPONSE ---------------- */
     return Helper.response(
       true,
       "OTP verified successfully",
@@ -386,7 +254,8 @@ exports.verifyOtp = async (req, res) => {
         ayucash_balance: regUser.ayucash_balance,
         newUser: isNewUser,
         address: groupedAddresses,
-        user_type:type == 'doctor'?type:'user',
+        user_type: "user",
+        type
       },
       res,
       200
@@ -397,6 +266,298 @@ exports.verifyOtp = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
+
+
+// exports.verifyOtp = async (req, res) => {
+//   const t = await sequelize.transaction();
+//   try {
+//     const {
+//       mobile,
+//       otp,
+//       deviceToken,
+//       email,
+//       first_name,
+//       last_name,
+//       type,
+//       referral_code,
+//     } = req.body;
+//     const deviceId = req.headers?.deviceid;
+
+    
+//     if (!deviceId)
+//       return Helper.response(false, "Device Id is required", {}, res, 400);
+
+//     if (!mobile || !otp)
+//       return Helper.response(false, "Mobile and OTP required", {}, res, 200);
+
+//     const otpRecord = await Otp.findOne({
+//       where: { mobile, otp, status: true },
+//     });
+
+//     if (!otpRecord) return Helper.response(false, "Invalid OTP", {}, res, 200);
+
+//     if (new Date() > new Date(otpRecord.expiry_time))
+//       return Helper.response(false, "OTP expired", {}, res, 200);
+
+//     await Otp.update({ status: false }, { where: { mobile, otp } });
+
+//     if (type == "doctor") {
+//       let regDoctor = await Doctor.findOne({
+//         where: {
+//           phone: mobile,
+//         },
+//       });
+//       let token;
+//       if (!regDoctor) {
+//         let findDoctor = await Doctor.create(
+//           {
+//             token,
+//             phone: mobile,
+//           },
+//           { transaction: t }
+//         );
+
+//         token = jwt.sign({ id: findDoctor.id }, process.env.SECRET_KEY);
+//         // await regDoctor.update({ token }, { transaction: t });
+//         await findDoctor.update({ token }, { transaction: t });
+
+//         await t.commit();
+
+//         return Helper.response(
+//           true,
+//           "Data Found",
+//           { step: "step1", token },
+//           res,
+//           200
+//         );
+//       }
+
+//       token = jwt.sign({ id: regDoctor.id }, process.env.SECRET_KEY);
+
+//       await regDoctor.update({ token }, { transaction: t });
+
+//       await t.commit();
+//       const drExp = await Qualification.count({
+//         where: {
+//           doctorId: regDoctor?.id,
+//         },
+//       });
+//       const drslot = await DoctorSlot.count({
+//         where: {
+//           doctorId: regDoctor?.id,
+//         },
+//       });
+//       if (drslot) {
+//         return Helper.response(
+//           true,
+//           "OTP verified successfully",
+//           {
+//             id: regDoctor.id,
+//             name: regDoctor.name,
+//             mobile: regDoctor.phone,
+//             email: regDoctor.email,
+//             token,
+//             step: "completed",
+//             type: "doctor",
+//           },
+//           res,
+//           200
+//         );
+//       } else if (drExp) {
+//         return Helper.response(
+//           true,
+//           "OTP verified successfully",
+//           {
+//             id: regDoctor.id,
+//             name: regDoctor.name,
+//             mobile: regDoctor.phone,
+//             email: regDoctor.email,
+//             token,
+//             step: "step3",
+//             type: "doctor",
+//           },
+//           res,
+//           200
+//         );
+//       } else {
+//         return Helper.response(
+//           true,
+//           "OTP verified successfully",
+//           {
+//             id: regDoctor.id,
+//             name: regDoctor.name,
+//             mobile: regDoctor.phone,
+//             email: regDoctor.email,
+//             token,
+//             step: "step2",
+//             type: "doctor",
+//           },
+//           res,
+//           200
+//         );
+//       }
+//     }
+
+//     let regUser = await registered_user.findOne({
+//       where: { mobile, isDeleted: false },
+//     });
+
+//     let isNewUser = false;
+
+//     if (!regUser) {
+//       isNewUser = true;
+
+//       let referralCode = Helper.generateReferralCode(first_name || "USR");
+//       let exists = await registered_user.findOne({
+//         where: { referral_code: referralCode },
+//       });
+//       if (exists)
+//         referralCode = Helper.generateReferralCode(first_name || "USR");
+
+//       const referralMaster = await referral_master.findOne({
+//         order: [["createdAt", "desc"]],
+//         transaction: t,
+//       });
+
+//       const newRegisterBonus = Number(referralMaster?.new_register || 500);
+//       const refereeBonus = Number(referralMaster?.referee_bonus || 250);
+//       const referrerBonus = Number(referralMaster?.referrer_bonus || 250);
+
+//       let referrerUser = null;
+//       let newUserBalance = newRegisterBonus;
+
+      
+
+//       if (referral_code) {
+//         referrerUser = await registered_user.findOne({
+//           where: { referral_code: referral_code, isDeleted: false },
+//         });
+
+//         if (referrerUser) {
+//           newUserBalance = newRegisterBonus + refereeBonus;
+//         }
+//       }
+
+     
+//       // Create user
+//       regUser = await registered_user.create(
+//         {
+//           mobile,
+//           email: email || null,
+//           first_name: first_name || "",
+//           last_name: last_name || "",
+//           password: "",
+//           confirmPassword: "",
+//           isDeleted: false,
+//           device_id: deviceId,
+//           type: type || "normal",
+//           referral_code: referralCode,
+//           referred_by: referrerUser?.id || null,
+//           ayucash_balance: newUserBalance,
+//         },
+//         { transaction: t }
+//       );
+
+//       const month = Helper.getCurrentMonth().split("-")[1];
+//       const year = Helper.getCurrentMonth().split("-")[0];
+
+//       if (referrerUser) {
+//         await UserMonthPoints.create(
+//           {
+//             parent_id: referrerUser.id,
+//             child_id: regUser.id,
+//             month,
+//             year,
+//             ayu_points: refereeBonus,
+//           },
+//           { transaction: t }
+//         );
+
+//         await registered_user.update(
+//           {
+//             ayucash_balance:
+//               (referrerUser.ayucash_balance || 0) + referrerBonus,
+//           },
+//           { where: { id: referrerUser.id }, transaction: t }
+//         );
+//       } else {
+//         await UserMonthPoints.create(
+//           {
+//             parent_id: regUser.id,
+//             child_id: null,
+//             month,
+//             year,
+//             ayu_points: newRegisterBonus,
+//           },
+//           { transaction: t }
+//         );
+//       }
+//     }
+
+   
+//     const token = jwt.sign({ id: regUser.id }, process.env.SECRET_KEY);
+
+//     await regUser.update(
+//       { token, deviceToken: deviceToken || null },
+//       { transaction: t }
+//     );
+
+    
+//     const addressList = await Address.findAll({
+//       where: {
+//         user_id: regUser.id,
+//         isSaved: true,
+//       },
+//       raw: true,
+//     });
+
+//     const groupedAddresses = [];
+
+//     addressList.forEach((address) => {
+//       const idx = groupedAddresses.length - 1;
+
+//       if (
+//         groupedAddresses.length > 0 &&
+//         (!groupedAddresses[idx].billing || !groupedAddresses[idx].shipping)
+//       ) {
+//         if (address.type === "billing") groupedAddresses[idx].billing = address;
+//         if (address.type === "shipping")
+//           groupedAddresses[idx].shipping = address;
+//       } else {
+//         groupedAddresses.push({
+//           billing: address.type === "billing" ? address : null,
+//           shipping: address.type === "shipping" ? address : null,
+//         });
+//       }
+//     });
+
+//     await t.commit();
+
+//     return Helper.response(
+//       true,
+//       "OTP verified successfully",
+//       {
+//         id: regUser.id,
+//         first_name: regUser.first_name,
+//         last_name: regUser.last_name,
+//         mobile: regUser.mobile,
+//         email: regUser.email,
+//         token,
+//         referral_code: regUser.referral_code,
+//         ayucash_balance: regUser.ayucash_balance,
+//         newUser: isNewUser,
+//         address: groupedAddresses,
+//         user_type:type == 'doctor'?type:'user',
+//       },
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     await t.rollback();
+//     console.error("Error verifying OTP:", error);
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
 
 // exports.verifyOtp = async (req, res) => {
 //   const t = await sequelize.transaction();
@@ -1766,10 +1927,13 @@ exports.checkOut = async (req, res) => {
         where: { registeruserId: registerUser.id },
         transaction,
       });
-      const currentBalance = registerUser.ayucash_balance || 0;
+      const currentBalance = Number(registerUser.ayucash_balance) || 0;
       //  const newBalance = currentBalance - Number(summary.maxRedeemableAyuCash || 0);
-      const newBalance = Math.min(currentBalance, maxRedeemableAyuCash);
+      // const newBalance = Math.min(currentBalance, maxRedeemableAyuCash);
+      const newBalance = currentBalance - Math.min(currentBalance, maxRedeemableAyuCash);
 
+      console.log(newBalance);
+      // return false;
       await registered_user.update(
         { ayucash_balance: Number(newBalance.toFixed(2)) },
         { where: { id: registerUser.id }, transaction }

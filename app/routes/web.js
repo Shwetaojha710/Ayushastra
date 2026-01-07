@@ -2,7 +2,7 @@ const express = require('express');
 const { userRegister, login } = require('../controller/auth/login');
 const { UserRegistration, Userlogin } = require('../controller/admin/account');
 const { AppsendOtp, AppverifyOtp } = require('../controller/admin/app');
-const { getCity, getDoctorByFilter, getDoctorInfo , getDoctorConsultationSlots, createConsultationBooking,getDoctorProfile} = require('../controller/consultancy/doctors');
+const { getCity, getDoctorByFilter, getDoctorInfo , getDoctorConsultationSlots, createConsultationBooking,WebcreateConsultationBooking,getDoctorProfile} = require('../controller/consultancy/doctors');
 const upload = require("../middleware/upload.js");
 const { publicRegisteredAdmin, DoctorAdmin } = require('../middleware/auth.js');
 const { createMultipleClinicsWithSlots } = require('../controller/admin/doctor.js');
@@ -27,7 +27,16 @@ router.post('/get-doctor-slots',getDoctorConsultationSlots)
 router.post('/get-doctor-profile',getDoctorProfile)
 // router.post('/book-doctor-slot',publicRegisteredAdmin,upload.fields([{ name: "prescription_img", maxCount: 10 }]),createConsultationBooking)
 router.post('/book-doctor-slot',publicRegisteredAdmin,upload.any(),createConsultationBooking)
-router.post('/create-multiple-clinic',DoctorAdmin,createMultipleClinicsWithSlots)
+// router.post('/web-book-doctor-slot',publicRegisteredAdmin,upload.fields([{ name: "prescription_img", maxCount: 10 }]),WebcreateConsultationBooking)
+
+const prescriptionFields = Array.from({ length: 10 }, (_, i) => ({
+  name: `prescription_img[${i}].prescription_img`,
+  maxCount: 1,
+}));
+
+router.post("/web-book-doctor-slot",publicRegisteredAdmin,upload.any(),WebcreateConsultationBooking);
+
+router.post('/create-multiple-clinic',createMultipleClinicsWithSlots)
 // 
 // router.post('/book-doctor-slot',upload.any(),createConsultationBooking)
 

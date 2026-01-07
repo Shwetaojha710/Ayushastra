@@ -384,10 +384,23 @@ exports.getPrescriptionDetails = async (req, res) => {
     prescription.patient_name = patient_name.name;
     prescription.patient_mobile = patient_name.mobile;
 
-    const medicines = await prescription_medicines.findAll({  
+    let medicines = await prescription_medicines.findAll({  
       where: { booking_id: booking_id },
       raw: true,
     });
+     medicines = await Promise.all(
+      medicines.map(async (item)=>{
+        const medicinesname=await TblMedicine.findOne({
+          where:{
+            Id:String(item?.medicine_id)
+          }
+        })
+        return{
+          ...item,
+          medicine_name:medicinesname?.MedicineName??'NA'
+        }
+      })
+    )
     return Helper.response(
       true,
       "Prescription details fetched successfully",  

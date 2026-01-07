@@ -1,4 +1,4 @@
-const { Op, col } = require("sequelize");
+const { Op, col, where } = require("sequelize");
 const CityMaster = require("../../model/city_master");
 const Helper = require("../../helper/helper");
 const Doctor = require("../../model/doctor");
@@ -10,6 +10,12 @@ const clinic = require("../../model/clinic");
 const Qualification = require("../../model/qualification");
 const Experience = require("../../model/experience");
 const department = require("../../model/department");
+const PrakritiUserResult = require("../../model/prakriti_user_result");
+const prescription_medicines = require("../../model/prescription_medicines");
+const PrakaritiAnswer = require("../../model/prakriti_answer");
+const PrakritiUserAnswer = require("../../model/prakriti_user_answers");
+const PrakritiQuestion = require("../../model/prakriti_question");
+const PrakritiOption = require("../../model/prakriti_option");
 // const department = require("../../model/department");
 
 exports.getCity = async (req, res) => {
@@ -34,7 +40,7 @@ exports.getCity = async (req, res) => {
 };
 
 exports.getDoctorByFilter = async (req, res) => {
-  const { specialization, city } = req.body;
+  const { specialization, city, search_key } = req.body;
 
   try {
     let whereClause = {
@@ -53,9 +59,15 @@ exports.getDoctorByFilter = async (req, res) => {
         [Op.iLike]: `%${city}%`,
       };
     }
+    if (search_key) {
+      whereClause.name = {
+        [Op.iLike]: `%${search_key}%`,
+      };
+    }
 
     const doctors = await Doctor.findAll({
       where: whereClause,
+      order: [["is_feature", "asc"]],
       raw: true,
       nest: true,
     });
@@ -430,7 +442,13 @@ exports.getDoctorInfo = async (req, res) => {
 exports.getDoctorConsultationSlots = async (req, res) => {
   try {
     const doctorId = req.body.doctor_id;
-    const type = req.body?.type;
+    let type = req.body?.type;
+
+    if (type == "book_consultation") {
+      type = "online";
+    } else {
+      type = "offline";
+    }
 
     if (!doctorId) {
       return Helper.response(false, "doctor id is required", null, res, 400);
@@ -445,7 +463,7 @@ exports.getDoctorConsultationSlots = async (req, res) => {
     //   where: { doctor_id: doctorId, session_type: type },
     //   raw: true,
     // });
-    let whereCondition = { doctor_id: doctorId };
+    let whereCondition = { doctor_id: doctorId, session_type: type };
 
     // if (type) {
     //     whereCondition.session_type = type;
@@ -525,15 +543,29 @@ exports.getDoctorConsultationSlots = async (req, res) => {
         const end = moment(slot.end_time, "HH:mm");
         const duration = slot.duration || 15;
 
+        const now = moment();
+        const todayDate = moment().format("YYYY-MM-DD");
+
         while (start < end) {
           const formattedTime = start.format("hh:mm A");
-          const hr = start.hour();
 
+          if (key == todayDate) {
+            const slotDateTime = moment(
+              `${key} ${formattedTime}`,
+              "YYYY-MM-DD hh:mm A"
+            );
+
+            if (slotDateTime.isBefore(now)) {
+              start.add(duration, "minutes");
+              continue;
+            }
+          }
+
+          const hr = start.hour();
           let category =
             hr < 12 ? "morning" : hr < 17 ? "afternoon" : "evening";
 
           const slotKey = `${key}_${formattedTime}`;
-
           const available = bookedMap[slotKey] ? false : true;
 
           slotsByDate[key1][category].push({
@@ -554,6 +586,36 @@ exports.getDoctorConsultationSlots = async (req, res) => {
 
           start.add(duration, "minutes");
         }
+
+        // while (start < end) {
+        //   const formattedTime = start.format("hh:mm A");
+        //   const hr = start.hour();
+
+        //   let category =
+        //     hr < 12 ? "morning" : hr < 17 ? "afternoon" : "evening";
+
+        //   const slotKey = `${key}_${formattedTime}`;
+
+        //   const available = bookedMap[slotKey] ? false : true;
+
+        //   slotsByDate[key1][category].push({
+        //     time: formattedTime,
+        //     available,
+        //     session_type: slot.session_type,
+        //     clinic_name: slot.clinic_name,
+        //     clinic_address: slot.clinic_address,
+        //     clinic_image_1: slot.clinic_image_1,
+        //     clinic_image_2: slot.clinic_image_2,
+        //     pin_code: slot.pin_code,
+        //     whatsApp: slot.whatsApp,
+        //     fees: slot.fees,
+        //     emergency_fees: slot.emergency_fees,
+        //     duration: slot.duration,
+        //     slot_date: key,
+        //   });
+
+        //   start.add(duration, "minutes");
+        // }
       }
     }
 
@@ -704,6 +766,99 @@ exports.createConsultationBooking = async (req, res) => {
   }
 };
 
+exports.WebcreateConsultationBooking = async (req, res) => {
+  try {
+    const {
+      doctor_id,
+      type,
+      slot_date,
+      slot_time,
+      name,
+      mobile,
+      gender,
+      dob,
+      age,
+      disease,
+      has_previous_medicine,
+      medicine_details,
+      symptom,
+      clinic_id,
+      medical_conditions,
+    } = req.body;
+
+    if (!doctor_id) {
+      return Helper.response(false, "Doctor Id is required", null, res, 400);
+    }
+
+    const ExistsDoctor = await Doctor.findOne({
+      where: { id: doctor_id },
+    });
+
+    if (!ExistsDoctor) {
+      return Helper.response(false, "No data Found", null, res, 400);
+    }
+
+    let slot_raw = null;
+    if (req.body.slot_raw) {
+      slot_raw = Helper.safeJSONParse(req.body.slot_raw, null);
+    }
+
+    // FILE HANDLING
+    let prescription_img = [];
+    if (req.files && req.files.length > 0) {
+      prescription_img = req.files.map((file) => file.filename);
+    }
+
+    const previous_medicine = has_previous_medicine === "yes";
+
+    const ExitsData = await DoctorConsultationBooking.findOne({
+      where: {
+        slot_date,
+        slot_time,
+        doctor_id,
+        status: "pending",
+      },
+    });
+
+    if (ExitsData) {
+      return Helper.response(false, "Data already exists", {}, res, 200);
+    }
+
+    const booking_id = Helper.generateConsultationBookingId(type);
+
+    const booking = await DoctorConsultationBooking.create({
+      doctor_id: parseInt(doctor_id),
+      type,
+      slot_date,
+      slot_time,
+      slot_raw,
+      name,
+      mobile,
+      gender,
+      dob,
+      clinic_id,
+      age: Number(age),
+      disease: disease || medical_conditions,
+      previous_medicine,
+      prescription_img,
+      booking_id,
+      symptom,
+      medicine_details: medicine_details ?? null,
+      user_id: req.users.id,
+    });
+
+    return Helper.response(
+      true,
+      "Booking Created Successfully",
+      booking,
+      res,
+      200
+    );
+  } catch (error) {
+    console.error("Error creating booking:", error);
+    return Helper.response(false, error.message, error, res, 500);
+  }
+};
 
 exports.getDoctorProfile = async (req, res) => {
   try {
@@ -804,7 +959,6 @@ exports.getDoctorProfile = async (req, res) => {
     return Helper.response(false, error?.message, error, res, 500);
   }
 };
-
 
 // exports.getDoctorProfile = async (req, res) => {
 //   try {
@@ -1239,3 +1393,102 @@ exports.BookingList = async (req, res) => {
 //     return Helper.response(false, error?.message, {}, res, 500);
 //   }
 // };
+
+exports.getPatientDetails = async (req, res) => {
+  try {
+    const { id } = req.body;
+    const doctorId = req.users?.id;
+    let prakritiResult = false;
+    if (!doctorId) {
+      return Helper.response(false, "Doctor not authenticated", {}, res, 401);
+    }
+    if (!id) {
+      return Helper.response(false, "Id is required", {}, res, 400);
+    }
+    const getBooking = await DoctorConsultationBooking.findOne({
+      where: {
+        id: id,
+        doctor_id: doctorId,
+        status: "started",
+      },
+    });
+
+    const getResult = await PrakritiUserResult.findOne({
+      where: {
+        mobile: getBooking?.mobile,
+      },
+    });
+    if (!getResult) {
+      prakritiResult = false;
+    } else {
+      prakritiResult = true;
+    }
+
+    const getUserPrescriptions = await DoctorConsultationBooking.findAll({
+      where: {
+        user_id: getBooking?.user_id,
+        status: "completed",
+      },
+    });
+
+    const getResultQuestions = await PrakritiUserAnswer.findAll({
+      where: {
+        test_id: getResult?.id,
+      },
+    });
+
+    const questionsWithAnswers = await Promise.all(
+      getResultQuestions.map(async (item) => {
+        const questionDetails = await PrakritiQuestion.findByPk(
+          item.question_id,
+          {
+            attributes: ["id", "question", "question_hint"],
+            raw: true,
+          }
+        );
+
+        const optionDetails = await PrakritiOption.findByPk(item.option_id, {
+          attributes: ["id", "option_label", "dosha", "value"],
+          raw: true,
+        });
+
+        return {
+          question: questionDetails?.question,          
+          answer: optionDetails.option_label
+        };
+      })
+    );
+
+    const getUserPrescriptionsWithDetails = await Promise.all(
+      getUserPrescriptions.map(async (item) => {
+        const prescriptions = await prescription_medicines.findOne({
+          where: {
+            booking_id: item?.booking_id,
+          },
+        });
+        return prescriptions;
+      })
+    );
+
+    if (!getBooking) {
+      return Helper.response(false, "No Data Found", {}, res, 200);
+    }
+    return Helper.response(
+      true,
+      "Data Found Successfully",
+      {
+        getBooking,
+        getResult,
+        prakritiResult,
+        getUserPrescriptionsWithDetails,
+        getResultQuestions,
+        questionsWithAnswers,
+      },
+      res,
+      200
+    );
+  } catch (error) {
+    console.error("Error fetching patient details:", error);
+    return Helper.response(false, error?.message, {}, res, 500);
+  }
+};

@@ -62,6 +62,15 @@ const Doctor = sequelize.define("doctor", {
     type:DataTypes.STRING,
     allowNull:true
   },
+  credit:{
+    type:DataTypes.STRING,
+    allowNull:true,
+    defaultValue:0
+  },
+  platform:{
+    type:DataTypes.STRING,
+    allowNull:true,
+  },
   address: {
     type: DataTypes.STRING,
     allowNull: true,
