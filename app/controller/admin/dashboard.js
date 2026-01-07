@@ -8,6 +8,7 @@ const moment = require("moment");
 const Address = require("../../model/address");
 const coupons = require("../../model/coupon");
 const OrderItem = require("../../model/orderItem");
+const registered_user = require("../../model/registeredusers");
 
 // Helper to generate current month labels until today
 function generateMonthLabels() {
@@ -250,9 +251,10 @@ exports.dashboardOrderTable = async (req, res) => {
 
     let finalData = await Promise.all(
       orders.map(async (order) => {
-        const [user, address, orderCount] = await Promise.all([
-          User.findOne({ where: { id: order.user_id } }),
-          Address.findOne({ where: { id: order.billing_address_id } }),
+        const [user, address,shippingAddess, orderCount] = await Promise.all([
+          registered_user.findOne({ where: { id: order.user_id } }),
+          Address.findOne({ where: { id: order.billing_address_id} }),
+          Address.findOne({ where: { id: order.shipping_address_id }}),
           OrderItem.count({ where: { order_id: order.id } }),
         ]);
         const order1 =await OrderItem.findAll({
@@ -269,7 +271,7 @@ exports.dashboardOrderTable = async (req, res) => {
             }
           }) 
          }
-        
+        const add=address?.address || shippingAddess?.address 
         return {
           id: order.id,
           orderNum: order.order_no,
@@ -280,13 +282,14 @@ exports.dashboardOrderTable = async (req, res) => {
           user_image: user?.profile_image || null,
           status: order?.order_status || "pending",
           date: moment(order.createdAt).format("YYYY-MM-DD hh:mm A"),
-          address: address?.address || "N/A",
+          address: add ?? 'NA',
           product_count: orderCount,
           items:orderCount == 1 ? product?.product_name: `${orderCount} items`
         };
       })
     );
 
+console.log(finalData);
 
     if (search && search.trim() !== "") {
       const lower = search.toLowerCase();
@@ -294,6 +297,7 @@ exports.dashboardOrderTable = async (req, res) => {
         (item) =>
           item.orderNum.toLowerCase().includes(lower) ||
           item.status.toLowerCase().includes(lower) ||
+          item.items.toLowerCase().includes(lower) ||
           item.address.toLowerCase().includes(lower) ||
           item.user_name.toLowerCase().includes(lower) ||
           item.totalAmount.toString().includes(lower)

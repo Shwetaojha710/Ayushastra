@@ -148,7 +148,7 @@ router.post("/create-product",Admin,upload.fields([{ name: "meta_img", maxCount:
 router.get("/list-product", Admin, getAllProducts);
 router.post("/product-by-id", Admin, ProductById);
 router.post("/update-product",Admin,upload.fields([{ name: "meta_img", maxCount: 1 }, { name: "product_banner_img", maxCount: 1 },{ name: "product_images", maxCount: 10 },]),updateProduct);
-router.get("/product-dd",Admin,getAllProductsDD)
+router.get("/product-dd",getAllProductsDD)
 
 // router.post('/delete-salt',Admin,deleteSalt)
 router.post("/create-banner",Admin,upload.any(),addBanner)
@@ -284,6 +284,6 @@ router.post('/list-doctor-patients',DoctorAdmin,listTodayPatientsForDoctor)
 // router.post("/add-dr-slot",DoctorAdmin, setDoctorAvailability);
 
 
-router.get("/product-dd", getProductDD);
+// router.get("/product-dd", getProductDD);
 
 module.exports = router;

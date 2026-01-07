@@ -9,7 +9,13 @@ const path = require('path')
 const prescriptions = require('./app/model/prescription')
 const prescription_medicines = require('./app/model/prescription_medicines')
 const treatment_master = require('./app/model/treatment_master')
+const PrakritiUserAnswer = require('./app/model/prakriti_user_answers')
 const port = process.env.SERVER_PORT || 9000
+const bookingStatusCron=require('./app/controller/cron/bookingStatusCron')
+const BulkOrder = require('./app/model/bulkorder')
+
+// const
+// require("./cron/bookingStatusCron");
 
 app.use(express.json())
 app.use(cors({

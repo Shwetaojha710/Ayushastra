@@ -11,6 +11,7 @@ const Clinic = require("../../model/clinic");
 const DoctorSlot = require("../../model/doctor_slots");
 const registered_user = require("../../model/registeredusers");
 const prescription_medicines = require("../../model/prescription_medicines");
+const Admin = require("../../model/admin");
 // const clinic = require("../../model/clinic");
 
 // exports.addDoctor=async(req,res)=>{
@@ -589,142 +590,146 @@ exports.doctorDashboard = async (req, res) => {
       return Helper.response(false, "Doctor ID required", {}, res, 400);
     }
 
+    const doctor=await Doctor.findOne({
+      where:{
+         id:doctor_id
+      }
+    })
+
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
     const [
-  // ---------------- APPOINTMENTS ----------------
-  totalAppointments,
-  upcomingAppointments,
-  pendingAppointments,
-  completedAppointments,
-  cancelledAppointments,
+      // ---------------- APPOINTMENTS ----------------
+      totalAppointments,
+      upcomingAppointments,
+      pendingAppointments,
+      completedAppointments,
+      cancelledAppointments,
 
-  // ---------------- CONSULTATIONS ----------------
-  totalConsultations,
-  upcomingConsultations,
-  pendingConsultations,
-  completedConsultations,
-  cancelledConsultations,
+      // ---------------- CONSULTATIONS ----------------
+      totalConsultations,
+      upcomingConsultations,
+      pendingConsultations,
+      completedConsultations,
+      cancelledConsultations,
 
-  // ---------------- TODAY ----------------
-  todaysAppointments,
-  todaysConsultations,
+      // ---------------- TODAY ----------------
+      todaysAppointments,
+      todaysConsultations,
 
-  // ---------------- PENDING PRESCRIPTIONS ----------------
-  pendingPrescriptions,
-] = await Promise.all([
+      // ---------------- PENDING PRESCRIPTIONS ----------------
+      pendingPrescriptions,
+    ] = await Promise.all([
+      // ===== APPOINTMENTS =====
+      DoctorConsultationBooking.count({
+        where: { doctor_id, type: "book_appointment" },
+      }),
 
-  // ===== APPOINTMENTS =====
-  DoctorConsultationBooking.count({
-    where: { doctor_id, type: "book_appointment" },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_appointment",
+          status: "pending",
+          slot_date: { [Op.gte]: today },
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_appointment",
-      status: "pending",
-      slot_date: { [Op.gte]: today },
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_appointment",
+          status: "pending",
+          slot_date: { [Op.lte]: today },
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_appointment",
-      status: "pending",
-      slot_date: { [Op.lte]: today },
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_appointment",
+          status: "completed",
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_appointment",
-      status: "completed",
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_appointment",
+          status: "cancelled",
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_appointment",
-      status: "cancelled",
-    },
-  }),
+      // ===== CONSULTATIONS =====
+      DoctorConsultationBooking.count({
+        where: { doctor_id, type: "book_consultation" },
+      }),
 
-  // ===== CONSULTATIONS =====
-  DoctorConsultationBooking.count({
-    where: { doctor_id, type: "book_consultation" },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_consultation",
+          status: "pending",
+          slot_date: { [Op.gte]: today },
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_consultation",
-      status: "pending",
-      slot_date: { [Op.gte]: today },
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_consultation",
+          status: "pending",
+          slot_date: { [Op.lte]: today },
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_consultation",
-      status: "pending",
-      slot_date: { [Op.lte]: today },
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_consultation",
+          status: "completed",
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_consultation",
-      status: "completed",
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_consultation",
+          status: "cancelled",
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_consultation",
-      status: "cancelled",
-    },
-  }),
+      // ===== TODAY =====
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_appointment",
+          slot_date: today,
+        },
+      }),
 
-  // ===== TODAY =====
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_appointment",
-      slot_date: today,
-    },
-  }),
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          type: "book_consultation",
+          slot_date: today,
+        },
+      }),
 
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      type: "book_consultation",
-      slot_date: today,
-    },
-  }),
-
-  // ===== PENDING PRESCRIPTIONS =====
-  DoctorConsultationBooking.count({
-    where: {
-      doctor_id,
-      is_user_join: true,
-      is_doctor_join: true,
-      status: "pending",
-      booking_id: {
-        [Op.notIn]: sequelize.literal(
-          `(SELECT booking_id FROM prescriptions)`
-        ),
-      },
-    },
-  }),
-]);
-
+      // ===== PENDING PRESCRIPTIONS =====
+      DoctorConsultationBooking.count({
+        where: {
+          doctor_id,
+          is_user_join: true,
+          is_doctor_join: true,
+          status: "pending",
+          booking_id: {
+            [Op.notIn]: sequelize.literal(
+              `(SELECT booking_id FROM prescriptions)`
+            ),
+          },
+        },
+      }),
+    ]);
 
     // const [
     //   // APPOINTMENTS
@@ -778,7 +783,7 @@ exports.doctorDashboard = async (req, res) => {
 
     //   // ---------------- CONSULTATIONS ----------------
     //   DoctorConsultationBooking.count({
-    //     where: { doctor_id, type: "book_consultation" ,   
+    //     where: { doctor_id, type: "book_consultation" ,
     //         },
     //   }),
 
@@ -865,6 +870,27 @@ exports.doctorDashboard = async (req, res) => {
       },
     };
 
+    const clinicDetailsOffline = await Clinic.findAll({
+      where: { doctorId: doctor_id, session_type: "offline" },
+      raw: true,
+      order: [["created_at", "desc"]],
+    });
+    const doctorSlot = await DoctorSlot.findAll({
+      where: { doctor_id: doctor_id },
+      raw: true,
+    });
+    const onlineSlot = await DoctorSlot.findAll({
+      where: { doctor_id: doctor_id, session_type: "online" },
+      raw: true,
+    });
+
+    const clinicWiseSlots = clinicDetailsOffline.map((clinic) => {
+      return {
+        ...clinic,
+        slots: doctorSlot.filter((slot) => slot.clinic_id == clinic.id),
+      };
+    });
+
     const WebdashboardStats = [
       {
         id: 1,
@@ -931,7 +957,14 @@ exports.doctorDashboard = async (req, res) => {
     return Helper.response(
       true,
       "Doctor dashboard stats fetched",
-      { dashboardStats, WebdashboardStats },
+      {
+        dashboardStats,
+        WebdashboardStats,
+        clinicWiseSlots,
+        onlineSlot,
+        doctorSlot,
+        online_consultation_fees: doctor?.online_consultation_fees ??0
+      },
       res,
       200
     );
@@ -1036,14 +1069,32 @@ exports.doctorDashboardList = async (req, res) => {
           where: { booking_id: item.booking_id },
           raw: true,
         });
-
+        console.log(prescription);
+        
+        // return {
+        //   ...item,
+        //   previous_prescription: {
+        //     disease: item.disease ? JSON.parse(item.disease) : [],
+        //     prescription_img: prescription?.prescription_img ? JSON.parse(prescription?.prescription_img) :[],
+        //     medicine_details: prescription?.medicine_details ? JSON.parse(prescription?.medicine_details) :[],
+        //   },
         return {
           ...item,
           previous_prescription: {
-            disease: item.disease ? JSON.parse(item.disease) : [],
-            prescription_img: prescription?.prescription_img ? JSON.parse(prescription?.prescription_img) :[],
-            medicine_details: prescription?.medicine_details ? JSON.parse(prescription?.medicine_details) :[],
+            disease: item?.disease
+              ? Helper.safeJSONParse(item.disease, [])
+              : [],
+
+            prescription_img: item?.prescription_img
+              ? Helper.safeJSONParse(item.prescription_img, [])
+              : [],
+
+            medicine_details: prescription?.medicine_details
+              ? Helper.safeJSONParse(prescription.medicine_details, [])
+              : [],
           },
+
+          // },
         };
       })
     );
@@ -1081,33 +1132,32 @@ exports.doctorDashboardList = async (req, res) => {
   }
 };
 
-
 exports.consultantDashboardList = async (req, res) => {
   try {
-    const uploadRoute = 'upload'
+    const uploadRoute = "upload";
     const doctor_id = req.users?.id;
     const { type = "upcoming" } = req.body; // upcoming | completed
- 
+
     if (!doctor_id) {
       return Helper.response(false, "Doctor id required", {}, res, 400);
     }
- 
+
     const today = new Date().toISOString().split("T")[0];
- 
+
     let whereCondition = {
       doctor_id,
       type: "book_consultation",
     };
- 
+
     if (type == "upcoming") {
       whereCondition.status = "pending";
       whereCondition.slot_date = { [Op.gte]: today };
     }
- 
+
     if (type == "completed") {
       whereCondition.status = "completed";
     }
- 
+
     const consultations = await DoctorConsultationBooking.findAll({
       where: whereCondition,
       order: [
@@ -1128,11 +1178,11 @@ exports.consultantDashboardList = async (req, res) => {
         "user_id",
         "symptom",
         "prescription_img",
-        "doctor_id"
+        "doctor_id",
       ],
       raw: true,
     });
- 
+
     const finalData = await Promise.all(
       consultations.map(async (item) => {
         const prescription = await prescriptions.findOne({
@@ -1140,30 +1190,34 @@ exports.consultantDashboardList = async (req, res) => {
             booking_id: item?.booking_id,
           },
         });
- 
+
         const doctorDetails = await Doctor.findOne({
           where: {
-            id:item?.doctor_id,
+            id: item?.doctor_id,
           },
         });
- 
+
         const userDetails = await registered_user.findOne({
-          where:{
-            id:item?.user_id
-          }
-        })
+          where: {
+            id: item?.user_id,
+          },
+        });
         return {
           ...item,
           doctorName: doctorDetails?.name,
-          doctorProfile: doctorDetails?.profileImage ? `${uploadRoute}/${doctorDetails?.profileImage}` : null,
-          userName:`${userDetails?.first_name} ${userDetails?.last_name}`,
-          userProfile: userDetails?.profile_image ? `${uploadRoute}/${userDetails?.profile_image}` : null,
+          doctorProfile: doctorDetails?.profileImage
+            ? `${uploadRoute}/${doctorDetails?.profileImage}`
+            : null,
+          userName: `${userDetails?.first_name} ${userDetails?.last_name}`,
+          userProfile: userDetails?.profile_image
+            ? `${uploadRoute}/${userDetails?.profile_image}`
+            : null,
           prescription,
           prescription_img: JSON.parse(item.prescription_img),
         };
       })
     );
- 
+
     return Helper.response(
       true,
       "Consultation list fetched successfully",
@@ -1316,27 +1370,27 @@ exports.AppointmentDashboardList = async (req, res) => {
   try {
     const doctor_id = req.users?.id;
     const { type = "upcoming" } = req.body; // upcoming | completed
- 
+
     if (!doctor_id) {
       return Helper.response(false, "Doctor id required", {}, res, 400);
     }
- 
+
     const today = new Date().toISOString().split("T")[0];
- 
+
     let whereCondition = {
       doctor_id,
       type: "book_appointment",
     };
- 
+
     if (type == "upcoming") {
       whereCondition.status = "pending";
       whereCondition.slot_date = { [Op.gte]: today };
     }
- 
+
     if (type == "completed") {
       whereCondition.status = "completed";
     }
- 
+
     const consultations = await DoctorConsultationBooking.findAll({
       where: whereCondition,
       order: [
@@ -1360,9 +1414,9 @@ exports.AppointmentDashboardList = async (req, res) => {
       ],
       raw: true,
     });
- 
+
     const bookingIds = consultations.map((c) => c.booking_id);
- 
+
     const prescriptions = await prescription_medicines.findAll({
       where: {
         booking_id: {
@@ -1373,9 +1427,9 @@ exports.AppointmentDashboardList = async (req, res) => {
       group: ["booking_id"],
       raw: true,
     });
- 
+
     const prescriptionSet = new Set(prescriptions.map((p) => p.booking_id));
- 
+
     const finalResponse = consultations.map((item) => ({
       ...item,
       prescription_img: JSON.parse(item.prescription_img),
@@ -1384,7 +1438,7 @@ exports.AppointmentDashboardList = async (req, res) => {
         ? "https://example.com/prescription/" + item.booking_id
         : null,
     }));
- 
+
     return Helper.response(
       true,
       "Consultation list fetched successfully",
@@ -1400,20 +1454,61 @@ exports.AppointmentDashboardList = async (req, res) => {
 
 exports.createMultipleClinicsWithSlots = async (req, res) => {
   try {
-    const doctorId = req.users?.id;
+    const authHeader =
+      req.headers["authorization"] || req.headers["Authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    let doctorId;
+    let drtoken = await Doctor.findOne({
+      where: {
+        token,
+      },
+    });
+    if (!drtoken) {
+      drtoken = await Admin.findOne({
+        where: {
+          token,
+        },
+      });
+      doctorId = req.body.doctor_id;
+      if (!doctorId) {
+        return Helper.response(false, "Doctor Id is Required", {}, res, 200);
+      }
+    } else {
+      req.users = {
+        id: drtoken.id,
+        name: drtoken.name,
+        token: drtoken.token,
+        role: drtoken.role,
+      };
+      doctorId = req.users?.id;
+    }
+    if (!drtoken) {
+      return Helper.response(false, "No User Found", {}, res, 200);
+    }
+
     const { clinic: clinicData, slots } = req.body;
- 
+
     if (!doctorId) {
       return Helper.response(false, "Doctor not authenticated", {}, res, 401);
     }
- 
+
     if (!clinicData || !Array.isArray(slots)) {
       return Helper.response(false, "Invalid payload", {}, res, 400);
     }
- 
+    const existsClinic=await Clinic.findOne({
+      where:{
+        doctor_id:doctorId,
+        clinic_name:clinicData?.clinic_name,
+        clinic_address:clinicData?.clinic_address,
+        fees:clinicData?.fees,
+      }
+    })
+    // if(existsClinic){
+    //   return Helper.response(false,"Clinic Already Exists",{},res,400)
+    // }
     let createdClinic = null;
     let slotRows = [];
- 
+
     await sequelize.transaction(async (t) => {
       if (clinicData.clinic_id > 0) {
         await DoctorSlot.destroy({
@@ -1423,7 +1518,7 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
           },
           transaction: t,
         });
- 
+
         await Clinic.update(
           {
             session_type: "offline",
@@ -1440,13 +1535,13 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
             transaction: t,
           }
         );
- 
+
         for (const dayObj of slots) {
           const { day, slots: daySlots } = dayObj;
- 
+
           if (!day || !Array.isArray(daySlots) || daySlots.length === 0)
             continue;
- 
+
           for (const timeSlot of daySlots) {
             slotRows.push({
               doctorId,
@@ -1475,13 +1570,13 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
           },
           { transaction: t }
         );
- 
+
         for (const dayObj of slots) {
           const { day, slots: daySlots } = dayObj;
- 
+
           if (!day || !Array.isArray(daySlots) || daySlots.length === 0)
             continue;
- 
+
           for (const timeSlot of daySlots) {
             slotRows.push({
               doctorId,
@@ -1499,12 +1594,12 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
           }
         }
       }
- 
+
       if (slotRows.length > 0) {
         await DoctorSlot.bulkCreate(slotRows, { transaction: t });
       }
     });
- 
+
     return Helper.response(
       true,
       clinicData.clinic_id > 0
@@ -1522,23 +1617,23 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
- 
+
 // exports.createMultipleClinicsWithSlots = async (req, res) => {
 //   try {
 //     const doctorId = req.users?.id;
 //     const { clinic: clinicData, slots } = req.body;
- 
+
 //     if (!doctorId) {
 //       return Helper.response(false, "Doctor not authenticated", {}, res, 401);
 //     }
- 
+
 //     if (!clinicData || !Array.isArray(slots)) {
 //       return Helper.response(false, "Invalid payload", {}, res, 400);
 //     }
- 
+
 //     let createdClinic = null;
 //     let slotRows = [];
- 
+
 //     await sequelize.transaction(async (t) => {
 //       if (clinicData.clinic_id > 0) {
 //         await DoctorSlot.destroy({
@@ -1548,7 +1643,7 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
 //           },
 //           transaction: t,
 //         });
- 
+
 //         await Clinic.update(
 //           {
 //             session_type: "offline",
@@ -1565,13 +1660,13 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
 //             transaction: t,
 //           }
 //         );
- 
+
 //         for (const dayObj of slots) {
 //           const { day, slots: daySlots } = dayObj;
- 
+
 //           if (!day || !Array.isArray(daySlots) || daySlots.length === 0)
 //             continue;
- 
+
 //           for (const timeSlot of daySlots) {
 //             slotRows.push({
 //               doctorId,
@@ -1598,13 +1693,13 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
 //           },
 //           { transaction: t }
 //         );
- 
+
 //         for (const dayObj of slots) {
 //           const { day, slots: daySlots } = dayObj;
- 
+
 //           if (!day || !Array.isArray(daySlots) || daySlots.length === 0)
 //             continue;
- 
+
 //           for (const timeSlot of daySlots) {
 //             slotRows.push({
 //               doctorId,
@@ -1622,12 +1717,12 @@ exports.createMultipleClinicsWithSlots = async (req, res) => {
 //           }
 //         }
 //       }
- 
+
 //       if (slotRows.length > 0) {
 //         await DoctorSlot.bulkCreate(slotRows, { transaction: t });
 //       }
 //     });
- 
+
 //     return Helper.response(
 //       true,
 //       clinicData.clinic_id > 0

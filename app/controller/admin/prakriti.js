@@ -9,6 +9,7 @@ const PrakritiOption = require("../../model/prakriti_option");
 const User = require("../../model/user");
 const PrakritiUserResult = require("../../model/prakriti_user_result");
 const PrakritiRecommendation = require("../../model/prakriti_recommendations");
+const PrakritiUserAnswer = require("../../model/prakriti_user_answers");
 // const { options } = require("../../routes/public");
 const SCORE_MAP = { never: 0, rarely: 1, often: 2, always: 3 };
 
@@ -156,6 +157,11 @@ exports.submitprakritiQuiz = async (req, res) => {
     if (!answers || !userInfo) {
       return Helper.response(false, "Invalid payload", {}, res, 400);
     }
+const DOSHA_MAP = {
+  V: 'VATA',
+  P: 'PITTA',
+  K: 'KAPHA'
+};
 
     const optionIds = Object.values(answers);
 
@@ -193,12 +199,20 @@ exports.submitprakritiQuiz = async (req, res) => {
     } else if (K >= V + 3 && K >= P + 3) {
       prakritiType = "KAPHA";
     } else {
+      // const sorted = Object.entries(score)
+      //   .sort((a, b) => b[1] - a[1])
+      //   .slice(0, 2)
+      //   .map((i) => i[0])
+      //   .join("-");
       const sorted = Object.entries(score)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 2)
-        .map((i) => i[0])
-        .join("-");
-      prakritiType = sorted; // V-P / P-K / V-K
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 2)
+  .map(([key]) => DOSHA_MAP[key])
+  .join("-");
+
+prakritiType = sorted; // VATA-PITTA 
+
+      // prakritiType = sorted; // V-P / P-K / V-K
     }
 
     /* -----------------------------
@@ -208,7 +222,7 @@ exports.submitprakritiQuiz = async (req, res) => {
     /* -----------------------------
        STEP 5: SAVE RESULT
     ----------------------------- */
-    await PrakritiUserResult.create(
+   const prkResult=   await PrakritiUserResult.create(
       {
         // user_id: user.id,
         name: userInfo.fullName,
@@ -222,6 +236,26 @@ exports.submitprakritiQuiz = async (req, res) => {
       },
       { transaction: t }
     );
+
+    // 2. Prepare answers
+    const answerRows = [];
+
+    for (const questionId in answers) {
+      const optionId = answers[questionId];
+
+      const option = await PrakritiOption.findByPk(optionId);
+
+      answerRows.push({
+        test_id: prkResult.id,
+        question_id: questionId,
+        option_id: optionId,
+        dosha: option.dosha,
+        score: option.value,
+      });
+    }
+
+    // 3. Bulk insert
+    await PrakritiUserAnswer.bulkCreate(answerRows);
 
     const data = await Helper.getPrakritiRecommendations(prakritiType);
 
@@ -412,22 +446,55 @@ exports.getPrakritiAnswer = async (req, res) => {
       return Helper.response(false, "Id Is Required!", {}, res, 200);
     }
 
-    const answers = await PrakaritiAnswer.findAll({
-      where: { quiz_id: id },
-      attributes: [
-        "quiz_id",
-        "question_id",
-        [col("question_text"), "question"],
-        "selected_option",
-        "score",
-      ],
-      raw: true,
-    });
+ const answers = await PrakritiUserAnswer.findAll({
+  where: { test_id: id },
+  raw: true,
+});
+const questionIds = answers.map(a => a.question_id);
+const optionIds = answers.map(a => a.option_id);
+const questions = await PrakritiQuestion.findAll({
+  where: { id: questionIds },
+  attributes: ["id", "question"],
+  raw: true,
+});
+
+const options = await PrakritiOption.findAll({
+  where: { id: optionIds },
+  attributes: ["id", "option_label"],
+  raw: true,
+});
+const questionMap = {};
+questions.forEach(q => questionMap[q.id] = q.question);
+
+const optionMap = {};
+options.forEach(o => optionMap[o.id] = o.option_label);
+const formatted = answers.map(a => ({
+  question_id: a.question_id,
+  question: questionMap[a.question_id],
+  selected_option: optionMap[a.option_id],
+  dosha: a.dosha,
+  score: a.score,
+}));
+
+
+
+  
+    // const answers = await PrakaritiAnswer.findAll({
+    //   where: { quiz_id: id },
+    //   attributes: [
+    //     "quiz_id",
+    //     "question_id",
+    //     [col("question_text"), "question"],
+    //     "selected_option",
+    //     "score",
+    //   ],
+    //   raw: true,
+    // });
 
     return Helper.response(
       true,
       "Prakirity results fetched successfully",
-      answers,
+      formatted,
       res,
       200
     );
@@ -452,7 +519,7 @@ exports.CreatePrakiritQues = async (req, res) => {
     if (
       !category_id ||
       !question ||
-      !option_one /list-prakrity-questions||
+      !option_one / list - prakrity - questions ||
       !option_two ||
       !option_three
     ) {
@@ -538,8 +605,7 @@ exports.updatePrakritiQues = async (req, res) => {
     // ---------------- UPDATE QUESTION ----------------
     await prakritiQues.update(
       {
-        prakriti_category_id:
-          category_id ?? prakritiQues.prakriti_category_id,
+        prakriti_category_id: category_id ?? prakritiQues.prakriti_category_id,
         question: question ?? prakritiQues.question,
         question_hint: question_hint ?? prakritiQues.question_hint,
         status: status ?? prakritiQues.status,
@@ -582,7 +648,6 @@ exports.updatePrakritiQues = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
-
 
 exports.getPrakritiQuestionList = async (req, res) => {
   try {
@@ -903,8 +968,6 @@ exports.getPrakritiQuestion = async (req, res) => {
   }
 };
 
-
-
 exports.savePrakritiRecommendationBulk = async (req, res) => {
   try {
     const { prakriti_type, data, recommended_products } = req.body;
@@ -917,10 +980,8 @@ exports.savePrakritiRecommendationBulk = async (req, res) => {
       return Helper.response(false, "data array is required", {}, res, 400);
     }
 
-  
-    const normalizedPrakriti = prakriti_type.toUpperCase().replace(/\s+/g, "-"); 
+    const normalizedPrakriti = prakriti_type.toUpperCase().replace(/\s+/g, "-");
 
-  
     const rows = data.map((item) => {
       if (!item.section) {
         throw new Error("section is required in data item");
@@ -933,21 +994,15 @@ exports.savePrakritiRecommendationBulk = async (req, res) => {
         description: recommended_products
           ? JSON.stringify(recommended_products)
           : null,
-        prefer: Array.isArray(item.prefer)
-          ? JSON.stringify(item.prefer)
-          : null,
-        avoid: Array.isArray(item.avoid)
-          ? JSON.stringify(item.avoid)
-          : null,
+        prefer: Array.isArray(item.prefer) ? JSON.stringify(item.prefer) : null,
+        avoid: Array.isArray(item.avoid) ? JSON.stringify(item.avoid) : null,
       };
     });
-
 
     await PrakritiRecommendation.destroy({
       where: { prakriti_type: normalizedPrakriti },
     });
 
- 
     await PrakritiRecommendation.bulkCreate(rows);
 
     return Helper.response(
@@ -965,8 +1020,11 @@ exports.savePrakritiRecommendationBulk = async (req, res) => {
 
 exports.getPrakritiRecommendationByType = async (req, res) => {
   try {
-      const data = await PrakritiRecommendation.findAll({
-      order: [["prakriti_type", "ASC"], ["id", "ASC"]],
+    const data = await PrakritiRecommendation.findAll({
+      order: [
+        ["prakriti_type", "ASC"],
+        ["id", "ASC"],
+      ],
       raw: true,
     });
 
@@ -1005,7 +1063,7 @@ exports.getPrakritiRecommendationByType = async (req, res) => {
           AAHAR: [],
           VIHAR: [],
           CHIKITSA: [],
-          status:item?.status??true
+          status: item?.status ?? true,
         };
       }
 
@@ -1024,7 +1082,7 @@ exports.getPrakritiRecommendationByType = async (req, res) => {
     return Helper.response(
       true,
       "All prakriti recommendations fetched successfully",
-     finalResponse,
+      finalResponse,
       res,
       200
     );
@@ -1033,4 +1091,3 @@ exports.getPrakritiRecommendationByType = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
-

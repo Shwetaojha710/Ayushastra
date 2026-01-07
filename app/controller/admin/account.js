@@ -831,6 +831,8 @@ exports.Userlogin = async (req, res) => {
         referral_code: user.referral_code,
         ayucash_balance: user.ayucash_balance,
         address,
+        user_type:"user",
+        type:type
       },
       res,
       200
@@ -1258,14 +1260,17 @@ exports.Userlogout = async (req, res) => {
 
 exports.myOrders = async (req, res) => {
   try {
-    const { search = "", page = 1, limit = 10 } = req.body;
+    const { search = "", page = 1, limit = 10 ,type} = req.body;
     const userId = req.users.id;
+
     if (!userId) {
       return Helper.response(false, "User ID is required", {}, res, 400);
     }
-
+   console.log(userId);
+  //  return 
+  // `                                                                                                                                                                        `
     const offset = (page - 1) * limit;
-    let whereCondition = { user_id: userId, user_type: "registered_user" };
+    let whereCondition = { user_id: userId, user_type: type??"registered_user" };
 
     if (search && search.trim() !== "") {
       whereCondition[Op.or] = [
@@ -1510,7 +1515,9 @@ exports.viewAddressDetails = async (req, res) => {
         tax: `₹${order?.tax}`,
         name: coupon ? `${coupon?.coupon_name}` : 0,
         discount: coupon ? `₹${coupon?.max_discount}` : 0,
+        maxRedeemableAyuCash: `-₹${order?.maxRedeemableAyuCash}`,
         total: `₹${order?.total_amount}`,
+     
         // coupon_id:coupon ? `${coupon?.coupon_id}`: 0,
       },
       shippingAddress: {

@@ -1926,8 +1926,7 @@ exports.addDoctor = async (req, res) => {
     // Required field check
     if (!body.name || !body.email || !body.gender || !body.dob)
       return Helper.response(false, "Missing required fields.", {}, res, 400);
-    // return res.status(400).json({ success: false, message: "Missing required fields." });
-    // Convert to Date objects
+  
     const start = new Date(`1970-01-01T${body?.start_time}:00`);
     const end = new Date(`1970-01-01T${body?.end_time}:00`);
 
@@ -1950,34 +1949,36 @@ exports.addDoctor = async (req, res) => {
     // Build doctor data
     const doctorData = {
       loginId: 1, // Or req.user.id if using auth
-      name: body.name,
-      experience: body.experience,
-      email: body.email,
-      gender: body.gender,
+      name: body.name??null,
+      experience: body.experience??null,
+      email: body.email??null,
+      gender: body.gender??null,
       dob: new Date(body.dob),
       age: calculateAge(body.dob),
       // refferalCode: body.referral_code,
-      address: body.address,
-      cityId: body.city,
-      stateId: body.state,
-      pinCode: body.pin_code,
-      phoneConsult: body.alt_mobile,
-      phone: body.mobile,
-      speciality: body.specialization,
-      disease_id: body.disease_id,
-      treatment_id: body.treatment_id,
-      about: body.bio,
-      registrationNo: body.registration,
-      registrationDate: new Date(body.year_of_completion),
-      KYCstatus: "pending",
+      address: body.address??null,
+      cityId: body.city??null,
+      stateId: body.state??null,
+      pinCode: body.pin_code??null,
+      phoneConsult: body.alt_mobile??null,
+      phone: body.mobile??null,
+      speciality: body.specialization??null,
+      disease_id: body.disease_id??null,
+      treatment_id: body.treatment_id??null,
+      about: body.bio == 'null'?null :body.bio,
+      registrationNo: body.registration??null,
+      // registrationDate: new Date(body?.year_of_completion)??null,
+      KYCstatus: "approved",
       password: "123456", // or hashed
       status: true,
-      availability: body?.availability,
-      end_time: body?.end_time,
-      start_time: body?.start_time,
-      online_consultation_fees: body?.online_consultation_fees,
+      availability: body?.availability??null,
+      credit: body?.credit??0,
+      platform: body?.platform??null,
+      end_time: body?.end_time??null,
+      start_time: body?.start_time??null,
+      online_consultation_fees: body?.online_consultation_fees??null,
       duration,
-      profileImage: files.profile_img
+      profileImage: files.profile_img??null
         ? `${path.basename(files.profile_img[0].path)}`
         : null,
       panNo: files.pan_img ? `${path.basename(files.pan_img[0].path)}` : null,
@@ -1990,9 +1991,9 @@ exports.addDoctor = async (req, res) => {
       cert_image: files.cert_img
         ? `${path.basename(files.cert_img[0].path)}`
         : null,
-      known_language: body.known_language,
-      refferalCode: referral_code,
-      refferedBy: body.refferedBy,
+      known_language: body.known_language??null,
+      refferalCode: referral_code??null,
+      refferedBy: body.refferedBy??null,
       appointmentCharge: body?.appointment_fees ?? 0,
       // consultancyCharge: body?.online_consultation_fees ??0,
     };
@@ -2028,18 +2029,23 @@ exports.addDoctor = async (req, res) => {
     const experience = [];
     let index1 = 0;
 
-    while (body[`experiences[${index}].organization`]) {
+    while (body[`experiences[${index1}].organization`]) {
+      let to_Date=body[`experiences[${index1}].to_date`]??null
+      if(to_Date=='null'){
+to_Date=null
+      }
+      
       experience.push({
         doctorId: doctor.id,
-        organization: body[`experiences[${index}].organization`],
-        department_id: new Date(body[`experiences[${index}].department_id`]),
-        from_date: body[`experiences[${index}].from_date`],
-        to_date: body[`experiences[${index}].to_date`],
-        is_current: body[`experiences[${index}].is_current`],
+        organization: body[`experiences[${index1}].organization`],
+        department_id:body[`experiences[${index1}].department_id`],
+        from_date: body[`experiences[${index1}].from_date`],
+        to_date: to_Date??null,
+        is_current: body[`experiences[${index1}].is_current`],
       });
       index1++;
     }
-    if (experience.length > 0) await Experience.bulkCreate(qualifications);
+    if (experience.length > 0) await Experience.bulkCreate(experience);
 
     return Helper.response(
       true,
@@ -2061,7 +2067,7 @@ exports.addDoctor = async (req, res) => {
     // });
   } catch (error) {
     console.error("Error adding doctor:", error);
-    return Helper.response(false, error?.message, {}, res, 500);
+    return Helper.response(false, error?.errors?.[0]?.message, {}, res, 500);
   }
 };
 
@@ -2105,7 +2111,8 @@ exports.addDoctorPersonal = async (req, res) => {
     // console.log(req.body,"body data111");
 
     const age = moment().diff(moment(dob, "YYYY-MM-DD"), "years");
-   const files=req.files
+   
+    const files = req.files;
     let referredBy = null;
     if (referralCode) {
       const refDoctor = await Doctor.findOne({
@@ -2119,8 +2126,7 @@ exports.addDoctorPersonal = async (req, res) => {
     const profileImage =
       files?.profile_img && files.profile_img.length
         ? path.basename(files.profile_img[0].path)
-        : null;
-
+        : null;   
     if (!doctor) {
       doctor = await Doctor.create(
         {
@@ -2129,7 +2135,7 @@ exports.addDoctorPersonal = async (req, res) => {
           name: doctor_name,
           email: email || null,
           phone: mobile,
-          dob: moment(dob, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          dob: moment(dob, "YYYY-MM-DD").format("YYYY-MM-DD"),
           age,
           gender,
           pinCode: pincode,
@@ -2152,7 +2158,7 @@ exports.addDoctorPersonal = async (req, res) => {
         {
           name: doctor_name,
           email: email || doctor.email,
-          dob: moment(dob, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          dob: moment(dob, "YYYY-MM-DD").format("YYYY-MM-DD"),
           age,
           gender,
           pinCode: pincode,
@@ -2313,13 +2319,14 @@ exports.addDoctorProfessional = async (req, res) => {
       qualifications = [],
       experiences = [],
       medical_council_number,
-      total_experince,
+      total_experience
     } = req.body;
 
     if (!doctorId) {
       await t.rollback();
       return Helper.response(false, "Doctor id is required", {}, res, 400);
     }
+
     const doctor = await Doctor.findByPk(doctorId, { transaction: t });
     if (!doctor) {
       await t.rollback();
@@ -2345,7 +2352,7 @@ exports.addDoctorProfessional = async (req, res) => {
           ? specializations.join(",")
           : doctor.speciality,
         registrationNo: medical_council_number ?? doctor.registrationNo,
-        experience: total_experince ?? doctor.experience,
+        experience: total_experience ?? doctor.experience,
         is_profile: "completed",
         cert_image: certFile ?? doctor.cert_image,
       },
@@ -2363,7 +2370,7 @@ exports.addDoctorProfessional = async (req, res) => {
         degree: q.degree,
         university: q.institution,
         certificate: certFile,
-        certificate_no: q.certificate_no,
+        certificate_no: q.council_certificate,
         certificate_type: q.certificate_type,
         passing_year: q.year,
       }));
@@ -2977,7 +2984,7 @@ exports.getallDoctorById = async (req, res) => {
           /* ================= State ================= */
           const state = doctor.stateId
             ? await State.findOne({
-                where: { statename: doctor.stateId, },
+                where: { statename: doctor.stateId },
                 attributes: [
                   ["pk_uniqueid", "value"],
                   ["state_name_en", "label"],
@@ -3070,6 +3077,7 @@ exports.getallDoctorById = async (req, res) => {
           return {
             ...doctor,
 
+            profile_image: doctor.profileImage ?? null,
             profile_image: doctor.profileImage ?? null,
 
             referral_code:
