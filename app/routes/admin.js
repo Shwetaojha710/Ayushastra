@@ -99,6 +99,7 @@ const { createDoctorChangeRequest } = require("../controller/admin/doctor.js");
 const PrakritiCategory = require("../model/prakriti_category.js");
 const { CreatePrakritiCategory, getAllPrakritiCategory, getAllPrakritiCategoryDD, updatePrakritiCategory } = require("../controller/admin/prakriti.js");
 const { updatebookingStatus } = require("../controller/consultancy/prescription.js");
+const { getPatientDetails } = require("../controller/consultancy/doctors.js");
 // const { login, logout, AIlogin,Applogin, verifyOtp, Applogout } = require('../controller/auth/login');
 // const {Admin, AppAdmin} = require('../middleware/auth');
 const router = express.Router();
@@ -148,7 +149,7 @@ router.post("/create-product",Admin,upload.fields([{ name: "meta_img", maxCount:
 router.get("/list-product", Admin, getAllProducts);
 router.post("/product-by-id", Admin, ProductById);
 router.post("/update-product",Admin,upload.fields([{ name: "meta_img", maxCount: 1 }, { name: "product_banner_img", maxCount: 1 },{ name: "product_images", maxCount: 10 },]),updateProduct);
-router.get("/product-dd",Admin,getAllProductsDD)
+router.get("/product-dd",getAllProductsDD)
 
 // router.post('/delete-salt',Admin,deleteSalt)
 router.post("/create-banner",Admin,upload.any(),addBanner)
@@ -281,9 +282,10 @@ router.post("/update-booking-status", updatebookingStatus);
 router.post('/delete-clinic',DoctorAdmin,deleteClinic)
 router.post('/create-patient-record',DoctorAdmin,createPatientFromDoctor)
 router.post('/list-doctor-patients',DoctorAdmin,listTodayPatientsForDoctor)
+router.post('/get-patient-details',DoctorAdmin,getPatientDetails)
 // router.post("/add-dr-slot",DoctorAdmin, setDoctorAvailability);
 
 
-router.get("/product-dd", getProductDD);
+// router.get("/product-dd", getProductDD);
 
 module.exports = router;

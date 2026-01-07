@@ -1897,7 +1897,7 @@ exports.getSubCategory = async (req, res) => {
 // };
 
 exports.getAppCartList = async (req, res) => {
-  try {
+  try {    
     const { ayu_cash_apply = true, type = null } = req.body;
     const userId = req.users?.id;
 
@@ -1933,6 +1933,10 @@ exports.getAppCartList = async (req, res) => {
         (acc, item) => acc + parseFloat(item.total),
         0
       );
+const draddressList = await Address.findAll({
+      where: { user_id: userId, type: "shipping", is_default: true },
+      raw: true,
+    });
 
       return Helper.response(
         true,
@@ -1951,6 +1955,7 @@ exports.getAppCartList = async (req, res) => {
             shipping_charge: 0,
             coupon_discount: 0,
           },
+          address_list: draddressList,
         },
         res,
         200
@@ -2614,9 +2619,12 @@ exports.AppcheckOut = async (req, res) => {
       shipping_id,
       billing_id,
       txn_id = null,
+      type
     } = req.body;
+    console.log(req.body,"body data");
+    
     const user_id = req.users?.id;
-    if (!user_id || !payment_method_id || !shipping_id || !billing_id) {
+    if (!user_id || !payment_method_id || !shipping_id ) {
       return Helper.response(
         false,
         "user_id, payment_method_id, shipping_id, billing_id are required",
@@ -2625,14 +2633,24 @@ exports.AppcheckOut = async (req, res) => {
         400
       );
     }
+    let user 
+    if(type=="doctor"){
+     user = await Doctor.findOne({
+      where: { id: user_id },
+      raw: true,
+    });
+    }
+    else{
+     user = await registered_user.findOne({
+      where: { id: user_id, isDeleted: false },
+      raw: true,
+    });
+    }
 
     // ------------------------------------------
     // 1 Validate User
     // ------------------------------------------
-    const user = await registered_user.findOne({
-      where: { id: user_id, isDeleted: false },
-      raw: true,
-    });
+  
 
     if (!user) {
       return Helper.response(false, "User not found", {}, res, 404);
@@ -2676,14 +2694,16 @@ exports.AppcheckOut = async (req, res) => {
       where: { id: shipping_id, user_id, is_default: true },
       raw: true,
     });
-
-    const billingAddress = await Address.findOne({
+    let billingAddress
+  if(billing_id){
+   billingAddress = await Address.findOne({
       where: { id: billing_id, user_id },
       raw: true,
     });
-
-    if (!shippingAddress || !billingAddress) {
-      return Helper.response(
+  }
+  
+    if(!shippingAddress){
+         return Helper.response(
         false,
         "Invalid shipping or billing address",
         {},
@@ -2691,6 +2711,16 @@ exports.AppcheckOut = async (req, res) => {
         400
       );
     }
+
+    // if (!shippingAddress || !billingAddress) {
+    //   return Helper.response(
+    //     false,
+    //     "Invalid shipping or billing address",
+    //     {},
+    //     res,
+    //     400
+    //   );
+    // }
 
     // ------------------------------------------
     // 5 Apply AyuCash
@@ -2731,10 +2761,10 @@ exports.AppcheckOut = async (req, res) => {
         // Payment method details stored from DB
         payment_method_id,
         payment_method: paymentMethodName,
-        payment_status: paymentMethodName == "COD" ? "pending" : "paid",
+        payment_status: paymentMethodName == "COD" ? "paid" : "paid",
         order_status: "placed",
         order_no: await Helper.generateOrderNumber(),
-        user_type: "registered_user",
+        user_type: type ?? "registered_user",
         txn_id,
       },
       { transaction }
@@ -2787,6 +2817,190 @@ exports.AppcheckOut = async (req, res) => {
     return Helper.response(false, error.message, {}, res, 500);
   }
 };
+
+// exports.AppcheckOut = async (req, res) => {
+//   const transaction = await sequelize.transaction();
+//   try {
+//     const {
+//       payment_method_id,
+//       ayu_cash = false,
+//       coupon_id = null,
+//       shipping_id,
+//       billing_id,
+//       txn_id = null,
+//     } = req.body;
+//     const user_id = req.users?.id;
+//     if (!user_id || !payment_method_id || !shipping_id || !billing_id) {
+//       return Helper.response(
+//         false,
+//         "user_id, payment_method_id, shipping_id, billing_id are required",
+//         {},
+//         res,
+//         400
+//       );
+//     }
+
+//     // ------------------------------------------
+//     // 1 Validate User
+//     // ------------------------------------------
+//     const user = await registered_user.findOne({
+//       where: { id: user_id, isDeleted: false },
+//       raw: true,
+//     });
+
+//     if (!user) {
+//       return Helper.response(false, "User not found", {}, res, 404);
+//     }
+
+//     // ------------------------------------------
+//     // 2 Validate Payment Method
+//     // ------------------------------------------
+//     const paymentMethod = await payment_method.findOne({
+//       where: { id: payment_method_id, status: true },
+//       raw: true,
+//     });
+
+//     if (!paymentMethod) {
+//       return Helper.response(false, "Invalid payment method", {}, res, 400);
+//     }
+
+//     // Example: paymentMethod.name = "COD" or "ONLINE"
+//     const paymentMethodName = paymentMethod.name;
+
+//     // ------------------------------------------
+//     // 3 Fetch Cart Summary
+//     // ------------------------------------------
+//     req.users = { id: user_id };
+//     const cartResult = await getCartSummaryInternal(req);
+//     console.log("Cart Result:111", cartResult);
+//     if (!cartResult.status) {
+//       return Helper.response(false, cartResult.message, {}, res, 400);
+//     }
+
+//     const { cart_items, order_summary } = cartResult.data;
+
+//     if (!cart_items.length) {
+//       return Helper.response(false, "Cart is empty", {}, res, 400);
+//     }
+
+//     // ------------------------------------------
+//     // 4 Validate Shipping + Billing Addresses
+//     // ------------------------------------------
+//     const shippingAddress = await Address.findOne({
+//       where: { id: shipping_id, user_id, is_default: true },
+//       raw: true,
+//     });
+
+//     const billingAddress = await Address.findOne({
+//       where: { id: billing_id, user_id },
+//       raw: true,
+//     });
+
+//     if (!shippingAddress || !billingAddress) {
+//       return Helper.response(
+//         false,
+//         "Invalid shipping or billing address",
+//         {},
+//         res,
+//         400
+//       );
+//     }
+
+//     // ------------------------------------------
+//     // 5 Apply AyuCash
+//     // ------------------------------------------
+//     let finalAmount = order_summary.total_amount;
+//     let redeemedCash = 0;
+
+//     if (ayu_cash && order_summary.maxRedeemableAyuCash) {
+//       redeemedCash = Math.min(
+//         Number(user.ayucash_balance),
+//         Number(order_summary.maxRedeemableAyuCash)
+//       );
+
+//       finalAmount -= redeemedCash;
+//     }
+
+//     // ------------------------------------------
+//     // 6 Create Order
+//     // ------------------------------------------
+//     const order = await Order.create(
+//       {
+//         user_id,
+//         shipping_address_id: shipping_id,
+//         billing_address_id: billing_id,
+//         subtotal: order_summary.sub_total,
+//         total_amount: finalAmount,
+//         coupon_id,
+//         coupon_discount:
+//           order_summary.coupon_discount == "Not Applicable"
+//             ? 0
+//             : order_summary.coupon_discount,
+//         shipping_cost: order_summary.shipping_charge,
+//         ayu_cash: redeemedCash,
+//         ayu_cash_apply: ayu_cash,
+//         maxRedeemableAyuCash: Math.round(
+//           parseFloat(order_summary.maxRedeemableAyuCash)
+//         ),
+//         // Payment method details stored from DB
+//         payment_method_id,
+//         payment_method: paymentMethodName,
+//         payment_status: paymentMethodName == "COD" ? "pending" : "paid",
+//         order_status: "placed",
+//         order_no: await Helper.generateOrderNumber(),
+//         user_type: "registered_user",
+//         txn_id,
+//       },
+//       { transaction }
+//     );
+
+//     // ------------------------------------------
+//     // 7 Create Order Items
+//     // ------------------------------------------
+//     for (const item of cart_items) {
+//       await OrderItem.create(
+//         {
+//           order_id: order.id,
+//           product_id: item.productId,
+//           quantity: item.quantity,
+//           unit_price: item.price,
+//           total: item.total,
+//         },
+//         { transaction }
+//       );
+//     }
+
+//     // ------------------------------------------
+//     // 8 Deduct AyuCash from Wallet
+//     // ------------------------------------------
+//     if (redeemedCash > 0) {
+//       await registered_user.update(
+//         {
+//           ayucash_balance: Number(user.ayucash_balance) - Number(redeemedCash),
+//         },
+//         { where: { id: user_id }, transaction }
+//       );
+//     }
+
+//     // ------------------------------------------
+//     // 9 Clear Cart
+//     // ------------------------------------------
+//     await Cart.destroy({ where: { registeruserId: user_id }, transaction });
+
+//     await transaction.commit();
+
+//     return Helper.response(
+//       true,
+//       "Order placed successfully",
+//       { order_id: order.id, order_no: order.order_no },
+//       res,
+//       200
+//     );
+//   } catch (error) {
+//     if (!transaction.finished) await transaction.rollback();
+//     return Helper.response(false, error.message, {}, res, 500);
+//   }
+// };
 
 async function getCartSummaryInternal(req) {
   try {

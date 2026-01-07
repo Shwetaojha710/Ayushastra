@@ -272,6 +272,8 @@ exports.getReferralStats = async (req, res) => {
       },
       raw: true,
     });
+    
+    const totalAyucashPoint=(ayu_cash?.ayucash_balance - monthlyAyuCash?.totalAyuCash<0) ? 0:ayu_cash?.ayucash_balance - monthlyAyuCash?.totalAyuCash
 
     // Final Response
     const stats = [
@@ -279,7 +281,7 @@ exports.getReferralStats = async (req, res) => {
         id: 6,
         title: "AyuCash Points",
         value: `${
-          ayu_cash?.ayucash_balance - monthlyAyuCash?.totalAyuCash ?? 0
+         totalAyucashPoint ?? 0
         }`,
         icon: "bi-cash-stack",
         color: "#dc6424",

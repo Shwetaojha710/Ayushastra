@@ -517,6 +517,37 @@ Helper.parseIds = (ids) => {
     .filter((i) => !isNaN(i));
 };
 
+Helper.safeJSONParse = (value, fallback = []) => {
+  try {
+    if (!value) return fallback;
+
+    // If already an array → return
+    if (Array.isArray(value)) return value;
+
+    // If object (but not array) → wrap in array
+    if (typeof value === "object") return [value];
+
+    // If string
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+
+      // JSON array string
+      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed : fallback;
+      }
+
+      // Normal single string like "BP", "Liver Disease"
+      return [trimmed];
+    }
+
+    return fallback;
+  } catch (err) {
+    console.error("JSON parse failed:", value);
+    return fallback;
+  }
+};
+
 
 Helper.getPrakritiRecommendations = async (prakriti) => {
   try {
@@ -549,7 +580,9 @@ Helper.getPrakritiRecommendations = async (prakriti) => {
       if (!acc[item.section]) acc[item.section] = [];
       acc[item.section].push({
         title: item.title,
-        description: item.description,
+        description: item.description?JSON.parse(item.description):null,
+        prefer: item.prefer,
+        avoid: item.avoid,
       });
       return acc;
     }, {});
@@ -753,64 +786,6 @@ Helper.generatePrescriptionPDF = async (data) => {
   }
 };
 
-Helper.formatAndGroupAddresses = (addresses = []) => {
-  if (!addresses.length) return [];
-
-  const formatAddress = (item) => ({
-    id: item.id,
-    full_name: item.full_name,
-    mobile: item.mobile,
-    address: item.address,
-    address_line2: item.address_line2,
-    city: item.city,
-    state: item.state,
-    postal_code: item.postal_code,
-    country: item.country,
-    is_default: item.is_default,
-    contact: {
-      name: item.full_name,
-      phone: item.mobile,
-    },
-  });
-
-  const grouped = {};
-
-  for (const addr of addresses) {
-    const key = addr.address_type || "HOME";
-
-    if (!grouped[key]) {
-      grouped[key] = {
-        address_type: key,
-        billing: null,
-        shipping: null,
-        isBillingSameAsShipping: false,
-      };
-    }
-
-    if (addr.type === "billing") {
-      grouped[key].billing = formatAddress(addr);
-      grouped[key].isBillingSameAsShipping =
-        addr.is_billing_same_as_shipping === true;
-    }
-
-    if (addr.type === "shipping") {
-      grouped[key].shipping = formatAddress(addr);
-    }
-  }
-
-  // Billing = Shipping
-  Object.values(grouped).forEach(group => {
-    if (
-      group.isBillingSameAsShipping &&
-      group.billing &&
-      !group.shipping
-    ) {
-      group.shipping = { ...group.billing };
-    }
-  });
-
-  return Object.values(grouped);
-};
 
 
 module.exports = Helper;
